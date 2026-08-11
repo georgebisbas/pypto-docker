@@ -157,6 +157,23 @@ Note: pypto + simpler are mounted from host at runtime, not pinned in the Docker
 
 ### Quick bulk check (all Dockerfiles)
 
+**Canonical: run the script.** `scripts/dockerfile-sync-check.sh` clones the four
+upstream repos **fresh** into a temp dir (never trusts local refs — a stale local
+checkout is exactly how pins silently drift), then compares every commit pin,
+PTOAS version/SHA, and pto-isa pin in all Dockerfiles against that fresh truth.
+It prints an `OK`/`DRIFT` line per pin and exits non-zero on any drift, so any
+agent (Claude / DeepSeek / Gemini / human) can gate on it:
+
+```bash
+./scripts/dockerfile-sync-check.sh          # exit 0 = all current, 1 = drift
+```
+
+Run it from the repo root; it clones into a temp dir and cleans up after itself
+(requires network). If it reports `DRIFT`, follow the per-Dockerfile checklist
+above to update the drifted pin, then re-run to confirm.
+
+**Reference: manual equivalent** (same checks, without the script):
+
 ```bash
 # Clone pypto, simpler, pypto-lib, and pytorch-hccl-tests if not already present
 cd /tmp
@@ -177,6 +194,14 @@ echo "=== pto-isa (simpler pin) ===" && cat /tmp/simpler/pto_isa.pin
 echo "=== PTOAS (toolchain/versions.env) ===" && grep -E '^(PTOAS_VERSION|PTOAS_SHA256)' /tmp/pypto/toolchain/versions.env
 echo "=== pip deps (pypto CI Dockerfile) ===" && grep 'pip install' /tmp/pypto/.github/docker/github_ci.Dockerfile
 ```
+
+> **Why fresh clones, not local refs:** `git -C <repo> rev-parse origin/main` reads
+> the *local* ref, which is only as fresh as the last `git fetch`. A stale ref makes
+> every check report "up to date" while upstream has moved. The script (and the
+> manual recipe above) clone upstream with `--depth 1`, so the comparison is always
+> against real current `main` — and **always re-read `toolchain/versions.env` and
+> `pto_isa.pin` from that fresh clone**, since PTOAS/pto-isa can move independently
+> of commit SHAs (see the PTOAS non-monotonic note above).
 
 ---
 
