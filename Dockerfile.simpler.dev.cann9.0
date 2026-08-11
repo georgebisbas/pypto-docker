@@ -2,7 +2,7 @@
 #
 # Bakes personal git identity + an editable install so a `docker run` drops
 # you straight into a ready-to-hack simpler checkout, instead of re-running
-# the same setup by hand every time (see pypto-tooling/personal_setup.md).
+# the same setup by hand every time (see ../pypto-tooling/personal_setup.md).
 #
 # No personal fork is configured by default (personal_setup.md only lists one
 # for pypto) — pass FORK_REMOTE_URL to add one for simpler too.

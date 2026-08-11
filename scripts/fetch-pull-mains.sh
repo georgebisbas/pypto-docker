@@ -3,9 +3,9 @@
 #
 # Usage (from anywhere):
 #   ./scripts/fetch-pull-mains.sh
-#   bash /path/to/pypto-tooling/scripts/fetch-pull-mains.sh
+#   bash /path/to/pypto-docker/scripts/fetch-pull-mains.sh
 #
-# Repos: pypto, pto-isa, PTOAS, pypto-lib (siblings of pypto-tooling).
+# Repos: pypto, pto-isa, PTOAS, pypto-lib (siblings of pypto-docker).
 
 set -euo pipefail
 

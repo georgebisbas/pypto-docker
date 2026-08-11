@@ -210,10 +210,10 @@ RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/n
 
 # Preload libhccl.so so host_runtime.so's WEAK HCCL symbols resolve at load time.
 # Without this, HcclGetRootInfo et al. → NULL → SIGSEGV on comm_init.
-# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+# See ../pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
 #
 # run-side: the container MUST be started with --pid=host for HCCL.
-# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+# See ../pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
 RUN test -f "/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so" \
     || (echo "ERROR: libhccl.so missing at /usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so" \
         && ls -la "/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/" | grep -i hccl \

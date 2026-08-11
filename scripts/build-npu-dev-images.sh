@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build personal dev-layer images on top of the Ascend 910B (CANN) images,
 # baking in git identity / fork remote / editable installs from
-# pypto-tooling/personal_setup.md so `docker run` drops you into a
+# ../pypto-tooling/personal_setup.md so `docker run` drops you into a
 # ready-to-hack checkout. Run on the NPU host, after the base images exist
 # (see build-npu-images.sh).
 #

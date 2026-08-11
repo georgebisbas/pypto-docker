@@ -13,7 +13,7 @@
 #   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 #
 # BUILD (pinned commits):
-#   docker build --build-arg PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#   docker build --build-arg PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56 --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 #
 # RUN:
 #   docker run --rm -it pypto3-hw-native-sys:sim
@@ -120,7 +120,7 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
       torch --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
-ARG PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a
+ARG PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \

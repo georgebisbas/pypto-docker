@@ -3,7 +3,7 @@
 # Bakes personal git identity + fork remote + an editable install so a
 # `docker run` drops you straight into a ready-to-hack pypto checkout,
 # instead of re-running the same setup by hand every time (see
-# pypto-tooling/personal_setup.md).
+# ../pypto-tooling/personal_setup.md).
 #
 # PREREQUISITE — build the base image first:
 #   ./scripts/build-npu-images.sh pypto

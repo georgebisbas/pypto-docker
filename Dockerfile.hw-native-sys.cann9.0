@@ -24,7 +24,7 @@
 #   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # BUILD (custom prefix / pinned pto-isa / different commit):
-#   docker build --build-arg PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#   docker build --build-arg PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # RUN (single-device, NO HCCL):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
@@ -33,7 +33,7 @@
 #   docker run --rm -it --privileged --ipc=host --pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
 #
 #   --pid=host is required: Ascend IPC validates host PIDs, not container PIDs.
-#   See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+#   See ../pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
 # COMMANDS INSIDE CONTAINER — mirrors pypto .github/workflows/ci.yml job order.
 #   INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0. CANN env is sourced from bash.bashrc.
 #   Device lists are inlined below (change 0,1,2,3 / 0 to match your host).
@@ -154,7 +154,7 @@ RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
 # GitHub does not allow shallow-fetching arbitrary SHAs directly.
-ARG PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a
+ARG PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -248,10 +248,10 @@ ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-l
 
 # Preload libhccl.so so host_runtime.so's WEAK HCCL symbols resolve at load time.
 # Without this, HcclGetRootInfo et al. → NULL → SIGSEGV on comm_init.
-# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+# See ../pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
 #
 # run-side: the container MUST be started with --pid=host for HCCL.
-# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+# See ../pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
 RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
     || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
         && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \

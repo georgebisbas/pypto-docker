@@ -41,7 +41,7 @@ esac
 
 command -v docker >/dev/null 2>&1 || { err "docker not found on PATH"; exit 1; }
 
-# Build context is pypto-tooling itself: Dockerfile.simpler.sim.ubuntu22.04
+# Build context is pypto-docker itself: Dockerfile.simpler.sim.ubuntu22.04
 # COPYs scripts/run-simpler-l3-sim.sh from here.
 cd "${TOOLING_DIR}"
 
