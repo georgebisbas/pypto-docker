@@ -437,7 +437,7 @@ npu-smi info
 ## See also
 
 - `../../pypto-tooling/debugging_skills/SKILL.md` — NPU error codes, dead device diagnosis, Docker runtime tips, distributed bug recipes
-- `diagnose_npu.py` — 10-point NPU health check (run inside container)
+- `../../pypto-tooling/diagnose_npu.py` — 10-point NPU health check (run inside container)
 - `issue_pytorch_hccl_tests.md` — pytorch-hccl-tests benchmark image: editable-install shadow, WORLD_SIZE Makefile shadow, fp64 HCCL reduce crash
 - `issue_0.md` — `comm_alloc_windows` / HCCL IPC driver mismatch
 - `issue_vscode_summary.md` — VS Code attach hang (`set_env.sh` + `LD_PRELOAD`)
