@@ -79,7 +79,7 @@ Build standalone simpler image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=8616c736ba39edbdf12fd02b90c382b72b470f23 \
+  --build-arg SIMPLER_COMMIT=144319b3e002eed119268081809e9e5e8b701f4d \
   --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f \
   -t simpler-cann9 \
   - < Dockerfile.simpler.cann9.0
@@ -122,7 +122,7 @@ Build standalone simpler simulation image (pinned commits):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=8616c736ba39edbdf12fd02b90c382b72b470f23 \
+  --build-arg SIMPLER_COMMIT=144319b3e002eed119268081809e9e5e8b701f4d \
   --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f \
   -t simpler-hw-native-sys:sim \
   -f Dockerfile.simpler.sim.ubuntu22.04 .
