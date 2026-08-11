@@ -1,0 +1,242 @@
+# PyPTO server/dev image (official CANN base, more isolated user-space stack)
+#
+# EXPECTED REPO LAYOUT (build context = hw-native-sys/):
+#
+# pypto/ MUST EXIST ON HOST, and pypto/runtime/ (the simpler submodule)
+# MUST be checked out on host.
+#
+#   workspace/hw-native-sys/
+#   ├── Dockerfile.server.cann:9.0   ← this file
+#   ├── pypto/                       ← main repo (required, copied into image)
+#   │   ├── pyproject.toml
+#   │   ├── runtime/                 ← required submodule (must be checked out)
+#   │   └── ...
+#   ├── PTOAS/                       ← cloned independently for editing
+#   ├── pto-isa/                     ← cloned independently for editing
+#   └── pypto_top_level_documents/   ← design docs repo
+#
+# WHAT GETS COPIED / CLONED DURING BUILD:
+#   /workspace/hw-native-sys/pypto   — copied from build context (required)
+#   /workspace/hw-native-sys/pypto/runtime — simpler submodule (required)
+#   /opt/pto-isa                     — from github.com/hw-native-sys/pto-isa.git (pinned commit)
+#   /opt/ptoas-bin                   — PTOAS binary (downloaded release tarball)
+#   ./3rdparty/*                     — libbacktrace/msgpack-c fallbacks if submodules missing
+#
+# BUILD:
+#   docker build -f "Dockerfile.server.cann:9.0" -t pypto3-dev-env:cann9 .
+#
+# RUN (single-device):
+#   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev -v $HOME/hw-native-sys:/workspace/hw-native-sys -w /workspace/hw-native-sys/pypto pypto3-dev-env:cann9
+#
+# RUN (multi-device, distributed / HCCL):
+#   docker run --rm -it --privileged --ipc=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev -v $HOME/hw-native-sys:/workspace/hw-native-sys -w /workspace/hw-native-sys/pypto/runtime pypto3-dev-env:cann9
+#
+# NOTE: Do NOT mount /usr/local/Ascend — the image already contains CANN 9.0.0.
+#   Only the host kernel-driver user-space (/usr/local/Ascend/driver) is needed.
+#   CANN 9.0.0 is required: comm_alloc_windows / SdmaWorkspaceManager::Init() calls
+#   aclnnShmemSdmaStarsQuery from libopapi.so, which is absent in CANN 8.5.0.
+#
+# SCOPE: real NPU execution only (a2a3 platform).
+#   Simulator mode (a2a3sim) is NOT supported — it requires C++23 <format> which
+#   needs GCC 13+ (not available in Ubuntu 22.04 arm64 standard repos).
+#
+# VERIFIED WORKING (4× Ascend 910B, driver v25.5.1, 2026-05-18):
+#   ✅ simpler L3 allreduce  (a2a3, 2-chip)
+#        python examples/workers/l3/allreduce/main.py -p a2a3 -d 0-1
+#        → [allreduce] all ranks matched golden ✅
+#   ✅ simpler L3 ep_dispatch_combine    (a2a3, 2-chip)
+#        python examples/workers/l3/ep_dispatch_combine/main.py -p a2a3 -d 0-1
+#        → [ep_dispatch] all ranks matched golden ✅
+#   ✅ simpler L2 tests  (28/28, a2a3, devices 0-3)
+#        pytest tests/ -v --platform=a2a3 --device="0,1,2,3"
+#
+# COMMON COMMANDS INSIDE CONTAINER (simpler submodule):
+#
+#   cd /workspace/hw-native-sys/pypto/runtime
+#
+#   # L2 tests (real NPU):
+#   pytest tests/ -v --platform=a2a3 --device="0,1,2,3"
+#
+#   # L3 distributed examples (multi-chip):
+#   python examples/workers/l3/allreduce/main.py -p a2a3 -d 0-1
+#   python examples/workers/l3/ffn_tp_parallel/main.py       -p a2a3 -d 0-1
+#   python examples/workers/l3/multi_chip_dispatch/main.py   -p a2a3 -d 0-1
+#   (hccl bootstrap)
+#   python examples/workers/l3/ep_dispatch_combine/main.py   -p a2a3 -d 0-1
+#
+# COMMON COMMANDS INSIDE CONTAINER (pypto):
+#
+#   cd /workspace/hw-native-sys/pypto
+#
+#   # Verify install:
+#   python -c "import pypto; print('pypto ok')"
+#   which ptoas
+#
+#   # (optional for testing) For live Python edits without rebuilding the image, reinstall editable:
+#   pip install -e ".[dev]"
+#
+#   # Unit tests:
+#   pytest tests/ut -v
+#
+#   # System tests (single-device, all 4 NPUs available to test runner):
+#   pytest tests/st -v --device="0,1,2,3" --precompile-workers=128 --ignore=tests/st/distributed
+#
+#   # Distributed system tests (all 4 NPUs):
+#   pytest tests/st/distributed -v --device="0,1,2,3"
+#
+# NOTES:
+# - CANN 9.0.0 is baked into the image. Do NOT mount /usr/local/Ascend from the host
+#   or it will shadow the image's CANN with the host's older version.
+#
+#
+FROM quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_CACHE_DIR=/tmp/pip-cache
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      git curl ca-certificates \
+      ccache \
+      build-essential cmake ninja-build pkg-config \
+      mpich libmpich-dev \
+      ripgrep nano \
+      bash-completion gh && \
+    if ! command -v g++-15 >/dev/null 2>&1; then \
+      ln -sf "$(command -v g++)" /usr/local/bin/g++-15; \
+    fi && \
+    if ! command -v gcc-15 >/dev/null 2>&1; then \
+      ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CC=gcc-15 \
+    CXX=g++-15
+
+RUN git config --system --add safe.directory /workspace/hw-native-sys/pypto && \
+    git config --system --add safe.directory /workspace/hw-native-sys/PTOAS && \
+  git config --system --add safe.directory /workspace/hw-native-sys/pto-isa && \
+  git config --system --add safe.directory /workspace/hw-native-sys/pypto_top_level_documents
+
+WORKDIR /workspace/hw-native-sys/pypto
+
+# pypto/runtime is the only supported simpler source location in this image.
+# Keep the runtime submodule checked out on host.
+
+# Install PTO-ISA (required by system tests that call code_runner).
+# Pinned to the commit from the runtime submodule's runtime/pto_isa.pin
+# (the single source of truth per pypto CI toolchain job; see PR #1851).
+ARG PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f
+RUN timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git /opt/pto-isa \
+      || { rm -rf /opt/pto-isa; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git /opt/pto-isa; } && \
+  git -C /opt/pto-isa checkout "${PTO_ISA_COMMIT}" && \
+  git -C /opt/pto-isa rev-parse --short HEAD
+
+ENV PTO_ISA_ROOT=/opt/pto-isa
+
+# Install PTOAS (required by PTOAS strategy tests in tests/st/codegen).
+ARG PTOAS_VERSION=v0.54
+ARG PTOAS_SHA256=011e980dbc46c796e31a1b213051d943ba8eb4c67d356ae6bda2148fe512964a
+RUN curl --fail --location --retry 3 --retry-all-errors \
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-bin-aarch64.tar.gz" \
+      -o /tmp/ptoas-bin-aarch64.tar.gz && \
+    echo "${PTOAS_SHA256}  /tmp/ptoas-bin-aarch64.tar.gz" | sha256sum -c - && \
+    mkdir -p /opt/ptoas-bin && \
+    tar -xzf /tmp/ptoas-bin-aarch64.tar.gz -C /opt/ptoas-bin && \
+    chmod +x /opt/ptoas-bin/ptoas /opt/ptoas-bin/bin/ptoas && \
+    rm -f /tmp/ptoas-bin-aarch64.tar.gz
+
+# Install Python toolchain first (stable layer).
+RUN python3 -m pip install --upgrade pip setuptools wheel && \
+    pip install \
+      "scikit-build-core>=0.10.0" \
+      "nanobind>=2.0.0" \
+      "ninja>=1.11.0" \
+      "cmake>=3.15"
+
+# Mirror CI image dependencies used across pre-commit/lint/unit/fuzz workflows.
+RUN pip install \
+      "numpy>=2.0" \
+      "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
+      "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
+      "pre-commit==4.5.1"
+
+# Match fuzz simulation environment from CI container image.
+RUN pip install \
+      torch --index-url https://download.pytorch.org/whl/cpu
+
+COPY pypto /workspace/hw-native-sys/pypto
+
+# Fail fast with clear errors if required repos/submodules are missing.
+RUN test -f /workspace/hw-native-sys/pypto/pyproject.toml || \
+      { echo 'BUILD ERROR: pypto/ missing or incomplete in build context'; exit 1; } && \
+    test -f /workspace/hw-native-sys/pypto/runtime/pyproject.toml || \
+      { echo 'BUILD ERROR: pypto/runtime/ missing. Run: git -C pypto submodule update --init --recursive'; exit 1; }
+
+# Ensure required third-party sources exist (submodule checkout or fallback clone).
+RUN if [ ! -f 3rdparty/libbacktrace/configure.ac ]; then \
+      rm -rf 3rdparty/libbacktrace && \
+      git clone --depth 1 https://github.com/ianlancetaylor/libbacktrace.git 3rdparty/libbacktrace; \
+    fi && \
+    if [ ! -f 3rdparty/msgpack-c/include/msgpack.hpp ]; then \
+      rm -rf 3rdparty/msgpack-c && \
+      git clone --depth 1 --branch cpp_master https://github.com/msgpack/msgpack-c.git 3rdparty/msgpack-c; \
+    fi && \
+    test -f 3rdparty/libbacktrace/configure.ac && \
+    test -f 3rdparty/msgpack-c/include/msgpack.hpp && \
+    test -f runtime/pyproject.toml
+
+# Build simpler C++ extension from the required runtime submodule.
+# Remove any stale build/ directory carried in by COPY (matches daily_ci.yml).
+RUN rm -rf /workspace/hw-native-sys/pypto/runtime/build && \
+    pip install --no-build-isolation /workspace/hw-native-sys/pypto/runtime
+
+RUN pip install --no-build-isolation -v ".[dev]"
+
+# Remove set_env.sh auto-sourcing from ALL system/user startup files.
+# The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.
+# All required env vars are set via ENV below; source manually when needed.
+RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.bash_profile; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done && \
+    for f in /etc/profile.d/*.sh; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done
+
+# Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
+RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
+
+# Preload libhccl.so so host_runtime.so's WEAK HCCL symbols resolve at load time.
+# Without this, HcclGetRootInfo et al. → NULL → SIGSEGV on comm_init.
+# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+#
+# run-side: the container MUST be started with --pid=host for HCCL.
+# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+RUN test -f "/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at /usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so" \
+        && ls -la "/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/" | grep -i hccl \
+        && exit 1)
+# LD_PRELOAD is NOT set automatically — setting it image-wide (ENV or bashrc) injects
+# libhccl.so into every process including VS Code server → hang on attach.
+# Before running HCCL tests, set it in your shell:
+#   export LD_PRELOAD=/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so
+# Without it, weak HCCL symbols in host_runtime.so stay NULL → SIGSEGV on comm_init.
+
+# VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
+# override per-container via ~/.devcontainer/devcontainer.json: {"userEnvProbe": "none"}
+
+ENV ASCEND_HOME_PATH=/usr/local/Ascend/cann-9.0.0 \
+    PTO_TILE_LIB_CODE_PATH=/usr/local/Ascend/cann-9.0.0 \
+    ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp \
+    MPI_HOME=/usr \
+    PTOAS_ROOT=/opt/ptoas-bin \
+    SIMPLER_ROOT=/workspace/hw-native-sys/pypto/runtime \
+    PTO_ISA_ROOT=/opt/pto-isa \
+    LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-} \
+    PATH=/opt/ptoas-bin:/opt/ptoas-bin/bin:${PATH} \
+    PYTHONPATH=/workspace/hw-native-sys/pypto/runtime/python:/workspace/hw-native-sys/pypto/runtime/examples/scripts \
+    PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/cann-9.0.0/python/site-packages:/usr/local/Ascend/cann-9.0.0/opp/built-in/op_impl/ai_core/tbe \
+    PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe
+CMD ["bash"]

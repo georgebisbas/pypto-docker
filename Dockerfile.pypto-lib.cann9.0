@@ -1,0 +1,69 @@
+# pypto-lib Ascend 910B image (real NPU, a2a3 / a5)
+#
+# Purpose:
+#   Run pypto-lib examples and model scripts on onboard NPUs.
+#   Extends the pypto CANN toolchain image with a baked pypto-lib checkout.
+#
+# Prerequisite base image (build once):
+#   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#
+# BUILD (defaults — pypto-lib main):
+#   docker build -t pypto-lib-hw-native-sys:cann9 - < Dockerfile.pypto-lib.cann9.0
+#
+# BUILD (pinned pypto-lib commit):
+#   docker build \
+#     --build-arg PYPTO_LIB_COMMIT=b97d959f088d19336f2ca3f6a9d539c5eb78444d \
+#     -t pypto-lib-hw-native-sys:cann9 \
+#     - < Dockerfile.pypto-lib.cann9.0
+#
+# RUN (single device):
+#   docker run --rm -it \
+#     --privileged --ipc=host \
+#     -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro \
+#     -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+#     -v /dev:/dev \
+#     pypto-lib-hw-native-sys:cann9
+#
+# RUN (multi-device / HCCL — MUST use --pid=host):
+#   docker run --rm -it \
+#     --privileged --ipc=host --pid=host \
+#     --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
+#     -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro \
+#     -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+#     -v /dev:/dev \
+#     pypto-lib-hw-native-sys:cann9
+#
+# QUICK CHECKS INSIDE CONTAINER:
+#   cd /opt/pypto-lib
+#   npu-smi info
+#   python examples/beginner/hello_world.py -p a2a3 -d 0
+#   python examples/advanced/allreduce.py -p a2a3 -d 0,1
+#
+# HCCL collectives (multi-card examples):
+#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   python examples/advanced/allreduce.py -p a2a3 -d 0,1
+#
+# LOCAL ITERATION:
+#   docker run ... -v /path/to/pypto-lib:/opt/pypto-lib pypto-lib-hw-native-sys:cann9
+
+ARG BASE_IMAGE=pypto3-hw-native-sys:cann9
+FROM ${BASE_IMAGE}
+
+ARG INSTALL_PREFIX=/opt
+ARG PYPTO_LIB_COMMIT=main
+
+ENV PYPTO_LIB_DIR=${INSTALL_PREFIX}/pypto-lib
+
+RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto-lib.git "${PYPTO_LIB_DIR}" && \
+    if [ "${PYPTO_LIB_COMMIT}" != "main" ]; then \
+      if ! git -C "${PYPTO_LIB_DIR}" cat-file -e "${PYPTO_LIB_COMMIT}^{commit}" 2>/dev/null; then \
+        git -C "${PYPTO_LIB_DIR}" fetch origin "${PYPTO_LIB_COMMIT}"; \
+      fi && \
+      git -C "${PYPTO_LIB_DIR}" checkout "${PYPTO_LIB_COMMIT}"; \
+    fi && \
+    git -C "${PYPTO_LIB_DIR}" rev-parse --short HEAD
+
+WORKDIR ${PYPTO_LIB_DIR}
+ENV PYTHONPATH=${PYPTO_LIB_DIR}
+
+CMD ["bash"]

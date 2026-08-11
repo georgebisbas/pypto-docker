@@ -1,0 +1,72 @@
+# Personal dev layer on top of simpler-cann9.
+#
+# Bakes personal git identity + an editable install so a `docker run` drops
+# you straight into a ready-to-hack simpler checkout, instead of re-running
+# the same setup by hand every time (see pypto-tooling/personal_setup.md).
+#
+# No personal fork is configured by default (personal_setup.md only lists one
+# for pypto) — pass FORK_REMOTE_URL to add one for simpler too.
+#
+# PREREQUISITE — build the base image first:
+#   ./scripts/build-npu-images.sh simpler
+#   (or: docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0)
+#
+# BUILD:
+#   docker build -t simpler-dev:cann9 -f Dockerfile.simpler.dev.cann9.0 .
+#
+# BUILD (custom identity / add a fork / base image tag):
+#   docker build \
+#     --build-arg BASE_IMAGE=simpler-cann9 \
+#     --build-arg GIT_USER_NAME="Your Name" \
+#     --build-arg GIT_USER_EMAIL="you@example.com" \
+#     --build-arg FORK_REMOTE_NAME=fork-yourname \
+#     --build-arg FORK_REMOTE_URL=https://github.com/yourname/simpler.git \
+#     -t simpler-dev:cann9 -f Dockerfile.simpler.dev.cann9.0 .
+#
+# RUN: identical flags to simpler-cann9 — see that Dockerfile's RUN section
+# (single-device vs multi-device/HCCL with --pid=host).
+#
+# INSIDE CONTAINER (only if FORK_REMOTE_URL was set at build time):
+#   cd ${SIMPLER_DIR}
+#   git checkout -b my-branch <fork-remote>/some-remote-branch
+#   pip install --no-build-isolation -e ".[test]"   # only needed again after checkout
+#
+# HCCL: LD_PRELOAD is intentionally NOT baked in here either — same VS Code
+# attach-hang reason as the base image (debugging_skills/SKILL.md). A
+# `hccl-preload` shell function is defined below; call it manually before
+# HCCL/distributed tests — defining it does not export anything by itself:
+#   hccl-preload && pytest tests/st/distributed/... --platform=a2a3 --device="0,1"
+
+ARG BASE_IMAGE=simpler-cann9
+FROM ${BASE_IMAGE}
+
+ARG GIT_USER_NAME="georgebisbas"
+ARG GIT_USER_EMAIL="georgios.bismpas@h-partners.com"
+ARG FORK_REMOTE_NAME=
+ARG FORK_REMOTE_URL=
+
+RUN git config --global user.name "${GIT_USER_NAME}" && \
+    git config --global user.email "${GIT_USER_EMAIL}" && \
+    git config --global pull.rebase true && \
+    git config --global --add safe.directory "${SIMPLER_DIR}"
+
+# Only add a fork remote if one was given — simpler has no default personal
+# fork today. Best-effort fetch: don't fail the build if unreachable.
+RUN if [ -n "${FORK_REMOTE_URL}" ]; then \
+      cd "${SIMPLER_DIR}" && \
+      git remote add "${FORK_REMOTE_NAME:-fork}" "${FORK_REMOTE_URL}" && \
+      (git fetch "${FORK_REMOTE_NAME:-fork}" || echo "WARNING: could not fetch ${FORK_REMOTE_NAME:-fork} at build time"); \
+    fi
+
+# Base image installs simpler non-editably (pip install .). Re-install
+# editable so source edits made inside the container take effect without a
+# full reinstall. Uses the '[test]' extra (matches simpler CI/sim images —
+# no '[dev]' extra is known to exist for simpler).
+RUN cd "${SIMPLER_DIR}" && pip install --no-build-isolation -e ".[test]"
+
+# HCCL preload helper — a function, not an exported var, so it is a no-op
+# until explicitly called (safe under VS Code's userEnvProbe).
+RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
+
+WORKDIR ${SIMPLER_DIR}
+CMD ["bash"]

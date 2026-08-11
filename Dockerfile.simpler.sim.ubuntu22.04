@@ -1,0 +1,139 @@
+# Standalone simpler local simulation image (x86_64, no NPU required)
+#
+# Purpose:
+#   Run simpler in simulation mode (a2a3sim / a5sim) on local machines.
+#   No pypto, CANN, or ptoas — mirrors simpler CI st-sim-a2a3.
+#
+# No local source checkout is required:
+#   - simpler is cloned at build time
+#   - pto-isa is cloned at build time and exported via PTO_ISA_ROOT
+#
+# BUILD:
+#   docker build -t simpler-hw-native-sys:sim -f Dockerfile.simpler.sim.ubuntu22.04 .
+#
+# BUILD (pinned commits):
+#   docker build \
+#     --build-arg SIMPLER_COMMIT=8616c736ba39edbdf12fd02b90c382b72b470f23 \
+#     --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f \
+#     -t simpler-hw-native-sys:sim \
+#     -f Dockerfile.simpler.sim.ubuntu22.04 .
+#
+# RUN:
+#   docker run --rm -it --shm-size=4g simpler-hw-native-sys:sim
+#
+# QUICK CHECKS INSIDE CONTAINER:
+#   cd /opt/simpler
+#   python -c "import simpler; print('simpler ok')"
+#   pytest tests/ut -m "not requires_hardware" -v --clone-protocol https
+#
+# L3 DISTRIBUTED / COLLECTIVE STs (a2a3sim — same flags as simpler ci.yml st-sim-a2a3):
+#   cd /opt/simpler
+#   pytest examples/workers/l3/allreduce \
+#     --platform a2a3sim --device 0-15 -v \
+#     --pto-session-timeout 600 \
+#     --clone-protocol https --require-pto-isa
+#
+# Or use the helper script:
+#   /opt/pypto-tooling/scripts/run-simpler-l3-sim.sh distributed
+#   /opt/pypto-tooling/scripts/run-simpler-l3-sim.sh all
+#
+# LOCAL BRANCH (mount workspace simpler/ over /opt/simpler):
+#   docker run --rm -it --shm-size=4g -v /path/to/simpler:/opt/simpler simpler-hw-native-sys:sim
+#   cd /opt/simpler && pip install --no-build-isolation -e '.[test]'
+#   /opt/pypto-tooling/scripts/run-simpler-l3-sim.sh distributed
+
+ARG UBUNTU_VERSION=22.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+ARG INSTALL_PREFIX=/opt
+
+ENV INSTALL_PREFIX=${INSTALL_PREFIX}
+ENV SIMPLER_DIR=${INSTALL_PREFIX}/simpler \
+    PTO_ISA_DIR=${INSTALL_PREFIX}/pto-isa
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_CACHE_DIR=/tmp/pip-cache
+
+# Simulator builds need modern GCC for _Float16 code paths.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends software-properties-common gnupg gpg-agent dirmngr && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      python3.10 python3.10-dev python3.10-venv \
+      gcc-15 g++-15 build-essential \
+      git curl ca-certificates \
+      ccache cmake ninja-build pkg-config \
+      ripgrep nano \
+      bash-completion gh && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 1 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 1 && \
+    update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-15 1 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-15 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python
+
+ENV CC=gcc-15 \
+    CXX=g++-15
+
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+      "scikit-build-core>=0.10.0" "nanobind>=2.0.0" \
+      "ninja>=1.11.0" "cmake>=3.15" && \
+    pip install --no-cache-dir \
+      "numpy>=2.0" \
+      "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" && \
+    pip install --no-cache-dir \
+      torch --index-url https://download.pytorch.org/whl/cpu
+
+ARG SIMPLER_COMMIT=8616c736ba39edbdf12fd02b90c382b72b470f23
+
+# Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
+RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
+    if ! git -C "${SIMPLER_DIR}" cat-file -e "${SIMPLER_COMMIT}^{commit}" 2>/dev/null; then \
+      git -C "${SIMPLER_DIR}" fetch origin "${SIMPLER_COMMIT}"; \
+    fi && \
+    git -C "${SIMPLER_DIR}" checkout "${SIMPLER_COMMIT}"
+
+WORKDIR ${SIMPLER_DIR}
+
+# PTO_ISA_COMMIT defaults to empty — auto-derived from simpler's pto_isa.pin at build time.
+ARG PTO_ISA_COMMIT=
+
+# Pre-clone pto-isa to avoid first-run cloning during tests.
+# If PTO_ISA_COMMIT was not set via --build-arg, derive it from simpler's
+# pto_isa.pin (the single source of truth; simpler CI reads it via
+# .github/actions/read-pto-isa).
+RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
+      PTO_ISA_COMMIT=$(tr -d '[:space:]' < pto_isa.pin); \
+      if ! printf '%s' "${PTO_ISA_COMMIT}" | grep -qE '^[0-9a-f]{40}$'; then \
+        echo "ERROR: pto_isa.pin missing or invalid (expected 40-char hex commit)"; exit 1; \
+      fi; \
+      echo "Auto-derived PTO_ISA_COMMIT=${PTO_ISA_COMMIT} from pto_isa.pin"; \
+    fi && \
+    timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git "${PTO_ISA_DIR}" \
+      || { rm -rf "${PTO_ISA_DIR}"; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git "${PTO_ISA_DIR}"; } && \
+    git -C "${PTO_ISA_DIR}" checkout "${PTO_ISA_COMMIT}" && \
+    git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
+
+ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
+
+# Match simpler CI st-sim-a2a3: pip install '.[test]' (no SIMPLER_PTO_ISA_COMMIT cmake pin for sim).
+RUN rm -rf ./build && \
+    pip install --no-build-isolation '.[test]'
+
+# Helper script for L3 sim pytest (optional; copy from build context when present).
+ARG TOOLING_DIR=${INSTALL_PREFIX}/pypto-tooling
+RUN mkdir -p "${TOOLING_DIR}/scripts"
+COPY scripts/run-simpler-l3-sim.sh "${TOOLING_DIR}/scripts/run-simpler-l3-sim.sh"
+RUN chmod +x "${TOOLING_DIR}/scripts/run-simpler-l3-sim.sh"
+
+WORKDIR ${SIMPLER_DIR}
+CMD ["bash"]

@@ -1,0 +1,274 @@
+# Standalone PyPTO dev image for Ascend 910B
+#
+# No local files required — everything is cloned from GitHub at build time.
+# No build context needed; build from any directory.
+#
+# All paths are driven by build args:
+#   CANN_VERSION    (default: 9.0.0)    — selects base image tag and all cann-* paths
+#   INSTALL_PREFIX  (default: /opt)     — root for pypto, pto-isa, ptoas installs
+#   PYPTO_COMMIT    (default: full SHA of github main) — must exist on github.com/hw-native-sys/pypto
+#                   Use 40-char SHA when pinning an older commit (GitHub fetch rejects short SHAs).
+#   PTO_ISA_COMMIT  (default: auto)     — pto-isa commit; auto-derived from runtime/pto_isa.pin if not set
+#   PTOAS_VERSION   (default: v0.54)    — PTOAS release (must match pypto CI)
+#
+# REQUIREMENTS:
+#   - Internet access during build (GitHub)
+#   - Ascend 910B NPUs + host driver at runtime
+#   - CANN >= 9.0.0
+#
+# SCOPE: real NPU execution tested only on a2a3 platform.
+#   a2a3sim needs real GCC 15+ (_Float16 in pto-isa CPU sim); the build installs
+#   gcc-15/g++-15 from ubuntu-toolchain-r/test when available.
+#
+# BUILD (defaults):
+#   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#
+# BUILD (custom prefix / pinned pto-isa / different commit):
+#   docker build --build-arg PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#
+# RUN (single-device, NO HCCL):
+#   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
+#
+# RUN (multi-device, distributed / HCCL — MUST use --pid=host):
+#   docker run --rm -it --privileged --ipc=host --pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
+#
+#   --pid=host is required: Ascend IPC validates host PIDs, not container PIDs.
+#   See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+# COMMANDS INSIDE CONTAINER — mirrors pypto .github/workflows/ci.yml job order.
+#   INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0. CANN env is sourced from bash.bashrc.
+#   Device lists are inlined below (change 0,1,2,3 / 0 to match your host).
+#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently 83d01313d9bfc247c4b7c8bcf969d1019f0d106f)
+#   unless PTO_ISA_COMMIT was overridden at build.
+#
+#   cd /opt/pypto
+#   npu-smi info
+#   python -c "import pypto; print('pypto ok')"
+#   which ptoas; ptoas --version
+#
+#   # --- unit-tests (job: unit-tests; CPU only, no NPU) ---
+#   pytest tests/ut -n auto --maxprocesses 8 -v
+#
+#   # --- codegen-tests (job: codegen-tests; CPU, no device / no ptoas / no pto-isa) ---
+#   # test_torch_codegen_paged_attention excluded here (unstable CPU golden); runs in system-tests on NPU.
+#   pytest tests/st/codegen -v --codegen-only --ignore=tests/st/codegen/torch/test_torch_codegen_paged_attention.py
+#
+#   # --- clang-tidy (job: clang-tidy; arm64 CPU in CI) ---
+#   python tests/lint/clang_tidy.py --jobs=$(nproc)
+#
+#   # --- system-tests (job: system-tests; NPU container in CI) ---
+#   pytest tests/st tests/st/codegen/torch/test_torch_codegen_paged_attention.py -v --device="0,1,2,3" --precompile-workers=128 --ignore=tests/st/distributed --ignore=tests/st/codegen
+#   # L2 multi-orch — separate pytest process (Worker level=2 poisons level=3 in the same process).
+#   pytest tests/st/distributed/test_l2_multi_orch.py -v --device="0,1,2,3"
+#   # Swimlane — single device, forked.
+#   pytest tests/st/runtime/framework_and_models/test_perf_swimlane.py -v --device=0 --platform=a2a3 --enable-l2-swimlane --forked
+#   # Dump-tensor — single device, forked.
+#   pytest tests/st/runtime/framework_and_models/test_dump_tag.py -v --device=0 --platform=a2a3 --dump-tensor --forked
+#
+#   # --- dist-system-tests (job: dist-system-tests; HCCL, bare-metal in CI) ---
+#   # CI runs without a GHA container; in Docker use --pid=host (see RUN block).
+#   # Set LD_PRELOAD before running (not set image-wide — would break VS Code attach):
+#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   pytest tests/st/distributed -v --device="0,1,2,3" --ignore=tests/st/distributed/test_l2_multi_orch.py
+#
+#   # --- Not covered by this image / CI job mapping ---
+#   # pre-commit: pre-commit run --all-files  (job: pre-commit; needs .git checkout hooks)
+#   # pypto-lib-model: clones pypto-lib and runs Qwen3/DeepSeek decode scripts on one NPU
+#   # system-tests-a5sim / a2a3sim: x86 simulator job (out of scope for this 910B image)
+#
+#   # --- simpler runtime (submodule; extra docker workflows — not pypto ci.yml jobs) ---
+#   cd /opt/pypto/runtime
+#   pip install --no-build-isolation .   # after editing runtime sources
+#   pytest tests/ut -m "not requires_hardware" -v --clone-protocol https
+#   pytest tests -m requires_hardware --platform a2a3 --device 0,1,2,3 -v --ignore=tests/ut/py/test_worker/test_dynamic_alloc_hw.py --ignore=tests/ut/py/test_worker/test_platform_comm.py
+#   pytest tests/st/a2a3/ -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
+#   # HCCL UT + L3 examples — container MUST use --pid=host.
+#   # LD_PRELOAD is NOT set image-wide (would break VS Code attach). Set it in your shell first:
+#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   pytest tests/ut/py/test_worker/test_dynamic_alloc_hw.py tests/ut/py/test_worker/test_platform_comm.py -m requires_hardware --platform a2a3 --device 0,1,2,3 -v
+#   pytest examples/workers/l3/ examples/a2a3/tensormap_and_ringbuffer/deferred_notify_demo examples/a2a3/tensormap_and_ringbuffer/async_notify_demo examples/a2a3/tensormap_and_ringbuffer/sdma_async_completion_demo -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
+
+# ARG before FROM: drives the base image tag.
+ARG CANN_VERSION=9.0.0
+FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
+
+# Re-declare after FROM (ARG scope resets after each FROM).
+ARG CANN_VERSION=9.0.0
+ARG INSTALL_PREFIX=/opt
+
+# Persist as ENV so all subsequent instructions can reference them.
+ENV CANN_VERSION=${CANN_VERSION} \
+    INSTALL_PREFIX=${INSTALL_PREFIX}
+
+# Derived paths — all other paths flow from these two.
+ENV CANN_HOME=/usr/local/Ascend/cann-${CANN_VERSION}
+ENV PYPTO_DIR=${INSTALL_PREFIX}/pypto \
+    PTO_ISA_DIR=${INSTALL_PREFIX}/pto-isa \
+    PTOAS_DIR=${INSTALL_PREFIX}/ptoas-bin
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_CACHE_DIR=/tmp/pip-cache
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      git curl ca-certificates software-properties-common gnupg \
+      ccache \
+      build-essential cmake ninja-build pkg-config \
+      graphviz \
+      mpich libmpich-dev \
+      ripgrep fd-find nano \
+      bash-completion gh && \
+    ln -sf "$(command -v fdfind)" /usr/local/bin/fd && \
+    add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    (apt-get install -y --no-install-recommends gcc-15 g++-15 || true) && \
+    if ! command -v g++-15 >/dev/null 2>&1; then \
+      ln -sf "$(command -v g++)" /usr/local/bin/g++-15; \
+    fi && \
+    if ! command -v gcc-15 >/dev/null 2>&1; then \
+      ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CC=gcc-15 \
+    CXX=g++-15
+
+# Python build toolchain + test deps (stable layer — changes only with ci.yml/github_ci.Dockerfile).
+RUN python3 -m pip install --upgrade pip setuptools wheel && \
+    pip install \
+      "scikit-build-core>=0.10.0" \
+      "nanobind>=2.0.0" \
+      "ninja>=1.11.0" \
+      "cmake>=3.15"
+
+RUN pip install \
+      "numpy>=2.0" \
+      "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
+      "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
+      "pre-commit==4.5.1"
+
+# Install torch (pin matches pypto/.github/docker/github_ci.Dockerfile)
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
+# Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
+# GitHub does not allow shallow-fetching arbitrary SHAs directly.
+ARG PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a
+RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
+    if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
+      git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
+    fi && \
+    git -C "${PYPTO_DIR}" checkout "${PYPTO_COMMIT}" && \
+    for i in 1 2 3; do \
+      git -C "${PYPTO_DIR}" submodule update --init --recursive && break || sleep 5; \
+    done
+
+WORKDIR ${PYPTO_DIR}
+
+# Ensure required third-party sources exist (submodule or fallback clone).
+# simpler is always the runtime submodule — no fallback clone needed.
+RUN if [ ! -f 3rdparty/libbacktrace/configure.ac ]; then \
+      rm -rf 3rdparty/libbacktrace && \
+      git clone --depth 1 \
+        https://github.com/ianlancetaylor/libbacktrace.git 3rdparty/libbacktrace; \
+    fi && \
+    if [ ! -f 3rdparty/msgpack-c/include/msgpack.hpp ]; then \
+      rm -rf 3rdparty/msgpack-c && \
+      git clone --depth 1 --branch cpp_master \
+        https://github.com/msgpack/msgpack-c.git 3rdparty/msgpack-c; \
+    fi && \
+    test -f 3rdparty/libbacktrace/configure.ac && \
+    test -f 3rdparty/msgpack-c/include/msgpack.hpp && \
+    test -f runtime/pyproject.toml
+
+# PTO_ISA_COMMIT defaults to empty — auto-derived from runtime/pto_isa.pin
+# (the single source of truth per pypto CI toolchain job; see PR #1851).
+# Set via --build-arg to pin a specific commit.
+ARG PTO_ISA_COMMIT=
+
+# Install PTO-ISA (required by system tests).
+# If PTO_ISA_COMMIT was not set via --build-arg, derive it from the runtime
+# submodule's runtime/pto_isa.pin (the single source of truth per pypto CI;
+# see toolchain job in .github/workflows/ci.yml and PR #1851).
+RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
+      PTO_ISA_COMMIT=$(tr -d '[:space:]' < runtime/pto_isa.pin); \
+      if ! printf '%s' "${PTO_ISA_COMMIT}" | grep -qE '^[0-9a-f]{40}$'; then \
+        echo "ERROR: runtime/pto_isa.pin missing or invalid (expected 40-char hex commit)"; exit 1; \
+      fi; \
+      echo "Auto-derived PTO_ISA_COMMIT=${PTO_ISA_COMMIT} from runtime/pto_isa.pin"; \
+    fi && \
+    timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git "${PTO_ISA_DIR}" \
+      || { rm -rf "${PTO_ISA_DIR}"; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git "${PTO_ISA_DIR}"; } && \
+    git -C "${PTO_ISA_DIR}" checkout "${PTO_ISA_COMMIT}" && \
+    git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
+
+ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
+
+# Install PTOAS binary.
+ARG PTOAS_VERSION=v0.54
+ARG PTOAS_SHA256=011e980dbc46c796e31a1b213051d943ba8eb4c67d356ae6bda2148fe512964a
+RUN curl --fail --location --retry 3 --retry-all-errors \
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-bin-aarch64.tar.gz" \
+      -o /tmp/ptoas-bin-aarch64.tar.gz && \
+    echo "${PTOAS_SHA256}  /tmp/ptoas-bin-aarch64.tar.gz" | sha256sum -c - && \
+    mkdir -p "${PTOAS_DIR}" && \
+    tar -xzf /tmp/ptoas-bin-aarch64.tar.gz -C "${PTOAS_DIR}" && \
+    chmod +x "${PTOAS_DIR}/ptoas" "${PTOAS_DIR}/bin/ptoas" && \
+    rm -f /tmp/ptoas-bin-aarch64.tar.gz
+
+# Build simpler runtime extension.
+RUN rm -rf ./runtime/build && \
+    pip install --no-build-isolation ./runtime
+
+# Build and install pypto.
+RUN pip install --no-build-isolation -v ".[dev]"
+
+# Remove set_env.sh auto-sourcing from ALL system/user startup files.
+# The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.
+# All required env vars are set via ENV below; source manually when needed.
+RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.bash_profile; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done && \
+    for f in /etc/profile.d/*.sh; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done
+
+# Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
+RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
+
+ENV ASCEND_HOME_PATH=${CANN_HOME} \
+    PTO_TILE_LIB_CODE_PATH=${CANN_HOME} \
+    ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp \
+    MPI_HOME=/usr \
+    PTOAS_ROOT=${PTOAS_DIR} \
+    SIMPLER_ROOT=${PYPTO_DIR}/runtime \
+    PTO_ISA_ROOT=${PTO_ISA_DIR}
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+
+# Preload libhccl.so so host_runtime.so's WEAK HCCL symbols resolve at load time.
+# Without this, HcclGetRootInfo et al. → NULL → SIGSEGV on comm_init.
+# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+#
+# run-side: the container MUST be started with --pid=host for HCCL.
+# See pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
+RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
+        && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \
+        && exit 1)
+# LD_PRELOAD is NOT set automatically — setting it image-wide (ENV or bashrc) injects
+# libhccl.so into every process including VS Code server → hang on attach.
+# Before running HCCL tests, set it in your shell:
+#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+# Without it, weak HCCL symbols in host_runtime.so stay NULL → SIGSEGV on comm_init.
+
+# VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
+# override per-container via ~/.devcontainer/devcontainer.json: {"userEnvProbe": "none"}
+
+ENV PATH=${PTOAS_DIR}:${PTOAS_DIR}/bin:${PATH}
+ENV PYTHONPATH=${PYPTO_DIR}/runtime/python:${PYPTO_DIR}/runtime/examples/scripts
+ENV PYTHONPATH=${PYTHONPATH}:${CANN_HOME}/python/site-packages:${CANN_HOME}/opp/built-in/op_impl/ai_core/tbe
+ENV PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe
+
+WORKDIR ${PYPTO_DIR}
+CMD ["bash"]

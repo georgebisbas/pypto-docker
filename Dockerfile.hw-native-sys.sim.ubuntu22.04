@@ -1,0 +1,173 @@
+# Standalone PyPTO local simulation image (x86_64, no NPU required)
+#
+# Purpose:
+#   Run PyPTO + simpler in simulation mode on local machines.
+#   This image is simulation-only (a2a3sim / a5sim), not onboard hardware.
+#
+# No local source checkout is required:
+#   - pypto is cloned at build time
+#   - pto-isa is cloned at build time and exported via PTO_ISA_ROOT
+#   - ptoas x86_64 binary is downloaded and exported via PTOAS_ROOT/PATH
+#
+# BUILD:
+#   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#
+# BUILD (pinned commits):
+#   docker build --build-arg PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#
+# RUN:
+#   docker run --rm -it pypto3-hw-native-sys:sim
+#
+# QUICK CHECKS INSIDE CONTAINER:
+#   cd /opt/pypto
+#   python -c "import pypto; print('pypto ok')"
+#   which ptoas && ptoas --version
+#   pytest tests/ut -n auto --maxprocesses 8 -v
+#   pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a2a3sim
+#   pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a5sim
+#
+# EXAMPLES (inside container, copy/paste one-liners):
+#   cd /opt/pypto && python examples/hello_world.py
+#   cd /opt/pypto && python examples/models/01_ffn.py
+#
+# EXPECTED OUTPUT WHEN EXAMPLES SUCCEED:
+#   - hello_world.py prints a final line: OK
+#   - model examples print [perf_hint] lines with paths under build_output/.../report/perf_hints.log
+#   - INFO_V9 scheduler/swimlane logs are expected in sim mode (timing + tasks_scheduled summaries)
+#   - non-fatal deprecation warnings may appear; run is still considered successful if process exits 0
+#
+# CI-LIKE SIMULATION MATRIX (copy/paste one-liners):
+#   cd /opt/pypto && pytest tests/ut -n auto --maxprocesses 8 -v
+#   cd /opt/pypto && pytest tests/st/codegen -v --codegen-only --ignore=tests/st/codegen/torch/test_torch_codegen_paged_attention.py
+#   cd /opt/pypto && python tests/lint/clang_tidy.py --jobs=$(nproc)
+#   cd /opt/pypto && pytest tests/st/runtime/ops/test_assemble.py tests/st/runtime/ops/test_mscatter.py tests/st/runtime/framework_and_models/test_qwen3_decode_scope3_mixed.py tests/st/runtime/control_flow/test_dyn_orch_shape.py::TestDynOrchShapeOperations::test_dyn_orch_paged_attention -v --platform=a5sim --forked -k "not TestMscatter"
+#   cd /opt/pypto && pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a5sim
+#   cd /opt/pypto && pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a2a3sim
+#   cd /opt/pypto && pytest tests/st -v --forked --platform=a2a3sim,a5sim
+#
+# DISTRIBUTED SIM (L3 multi-rank collectives — requires --shm-size=4g at docker run time):
+#   docker run --rm -it --shm-size=4g pypto3-hw-native-sys:sim
+#   cd /opt/pypto && pytest tests/st/distributed/ -v --forked --platform=a2a3sim --device=0,1
+#   cd /opt/pypto && pytest tests/st/distributed/ -v --forked --platform=a2a3sim --device=0,1,2,3
+#
+# DISTRIBUTED SIM RESULTS (2026-06-21, local workspace mount, device=0,1,2,3):
+#   43/45 pass; 1 skip (PTOAS atomic-add ordering known bug); 1 xpass (stale xfail annotation).
+#   simpler comm backend uses malloc+shm in sim — no HCCL, no NPU required.
+#   The Docker default RUN (without --shm-size) only provides 64 MB shared memory; pass --shm-size=4g.
+#
+# SIM SPECIAL CASES (expected):
+#   - a5sim cross-core: test_explicit_slot_num is currently xfail in upstream tests.
+#   - a5sim CI subset keeps -k "not TestMscatter" due known simulator/pto-isa mismatch.
+#   - Unit tests above are not sim-skipped by default; failures around Worker.current indicate stale test mocks and should be fixed in source.
+#
+# OPTIONAL PRE-COMMIT-STYLE CHECKS:
+#   cd /opt/pypto && pre-commit run --all-files
+#   cd /opt/pypto && pyright
+#   cd /opt/pypto && ruff check .
+
+ARG UBUNTU_VERSION=22.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+ARG INSTALL_PREFIX=/opt
+
+ENV INSTALL_PREFIX=${INSTALL_PREFIX}
+ENV PYPTO_DIR=${INSTALL_PREFIX}/pypto \
+    PTO_ISA_DIR=${INSTALL_PREFIX}/pto-isa \
+    PTOAS_DIR=${INSTALL_PREFIX}/ptoas-bin
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_CACHE_DIR=/tmp/pip-cache
+
+# Simulator builds need modern GCC for _Float16 code paths.
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends software-properties-common gnupg gpg-agent dirmngr && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      python3.10 python3.10-dev python3.10-venv \
+      gcc-15 g++-15 build-essential \
+      git curl ca-certificates \
+      ccache cmake ninja-build pkg-config \
+      ripgrep nano \
+      bash-completion gh && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 1 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 1 && \
+    update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-15 1 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-15 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python
+
+ENV CC=gcc-15 \
+    CXX=g++-15
+
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+      "scikit-build-core>=0.10.0" "nanobind>=2.0.0" \
+      "ninja>=1.11.0" "cmake>=3.15" && \
+    pip install --no-cache-dir \
+      "numpy>=2.0" \
+      "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
+      "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
+      "pre-commit==4.5.1" && \
+    pip install --no-cache-dir \
+      torch --index-url https://download.pytorch.org/whl/cpu
+
+# Clone pypto with submodules so runtime/simpler sources are present.
+ARG PYPTO_COMMIT=0be6431ec8df97cf177839140244ba97981feb6a
+RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
+    if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
+      git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
+    fi && \
+    git -C "${PYPTO_DIR}" checkout "${PYPTO_COMMIT}" && \
+    for i in 1 2 3; do \
+      git -C "${PYPTO_DIR}" submodule update --init --recursive && break || sleep 5; \
+    done
+
+# PTO_ISA_COMMIT defaults to empty — auto-derived from runtime/pto_isa.pin
+# (the single source of truth per pypto CI toolchain job; see PR #1851).
+# Set via --build-arg to pin a specific commit.
+ARG PTO_ISA_COMMIT=
+
+# Pre-clone pto-isa to avoid first-run cloning during tests.
+# If PTO_ISA_COMMIT was not set via --build-arg, derive it from the runtime
+# submodule's runtime/pto_isa.pin (the single source of truth per pypto CI;
+# see toolchain job in .github/workflows/ci.yml and PR #1851).
+RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
+      PTO_ISA_COMMIT=$(tr -d '[:space:]' < "${PYPTO_DIR}/runtime/pto_isa.pin"); \
+      if ! printf '%s' "${PTO_ISA_COMMIT}" | grep -qE '^[0-9a-f]{40}$'; then \
+        echo "ERROR: ${PYPTO_DIR}/runtime/pto_isa.pin missing or invalid (expected 40-char hex commit)"; exit 1; \
+      fi; \
+      echo "Auto-derived PTO_ISA_COMMIT=${PTO_ISA_COMMIT} from runtime/pto_isa.pin"; \
+    fi && \
+    timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git "${PTO_ISA_DIR}" \
+      || { rm -rf "${PTO_ISA_DIR}"; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git "${PTO_ISA_DIR}"; } && \
+    git -C "${PTO_ISA_DIR}" checkout "${PTO_ISA_COMMIT}" && \
+    git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
+
+# Install ptoas x86_64 used by simulator CI jobs (wheel from GitHub Release).
+ARG PTOAS_VERSION=v0.54
+ARG PTOAS_WHEEL_SHA256=b25a9804d307b6573ff15b88129485c416477f2567fe54f73105693b77532305
+RUN curl --fail --location --retry 3 --retry-all-errors \
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl" \
+      -o /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
+    python3 -m pip install /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    rm -f /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl
+
+ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
+
+WORKDIR ${PYPTO_DIR}
+
+# Install runtime first, then pypto (dev extras include pytest tooling).
+RUN rm -rf ./runtime/build && \
+    pip install --no-build-isolation -v ./runtime && \
+    pip install --no-build-isolation -v ".[dev]"
+
+CMD ["bash"]

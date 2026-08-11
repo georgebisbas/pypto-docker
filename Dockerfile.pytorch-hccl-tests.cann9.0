@@ -1,0 +1,216 @@
+# Standalone pytorch-hccl-tests image for Ascend 910B
+#
+# Minimal benchmark image: clones only the pytorch-hccl-tests fork and installs
+# just enough system packages to run torchrun-based HCCL benchmarks.
+#
+# All paths are driven by build args:
+#   CANN_VERSION            (default: 9.0.0) — selects the base image tag and cann-* paths
+#   INSTALL_PREFIX          (default: /opt)  — root for the benchmark checkout and venv
+#   PT_HCCL_REPO_URL        (default: georgebisbas fork URL)
+#   PT_HCCL_COMMIT          (default: 53a6734b085d9559fc069351747be2ca8663d6ff) — benchmark repo ref to checkout
+#   PT_HCCL_INSTALL_TARGET  (default: install-npu-arm) — Makefile target to install deps into the venv
+#
+# REQUIREMENTS:
+#   - Internet access during build (GitHub and pip indexes)
+#   - Ascend 910B NPUs + host driver at runtime
+#   - CANN >= 9.0.0
+#
+# BUILD (defaults):
+#   docker build -t pytorch-hccl-tests:cann9 - < Dockerfile.pytorch-hccl-tests.cann9.0
+#
+# BUILD (x86 host / custom ref):
+#   docker build --build-arg PT_HCCL_COMMIT=53a6734b085d9559fc069351747be2ca8663d6ff --build-arg PT_HCCL_INSTALL_TARGET=install-npu-x86 -t pytorch-hccl-tests:cann9 - < Dockerfile.pytorch-hccl-tests.cann9.0
+#
+# RUN (multi-device, HCCL collectives — MUST use --pid=host):
+#   docker run --rm -it --privileged --ipc=host --pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pytorch-hccl-tests:cann9
+#
+# NOTE:
+#   - Do NOT mount /usr/local/Ascend from host. The image already contains CANN.
+#   - The benchmark Makefile controls the torch / torch-npu install contract.
+#   - Do NOT set LD_PRELOAD image-wide (VS Code attach hang — see dockerfile_skills/issue_vscode_summary.md).
+#   - This image does NOT need LD_PRELOAD for torch HCCL benchmarks (no host_runtime.so).
+#   - CANN env is set via ENV; source set_env.sh manually only when debugging a missing var.
+#   - NPU collectives need --pid=host at docker run; LD_PRELOAD not required for this image.
+#
+# COMMANDS INSIDE CONTAINER (copy-paste; venv auto-activated in interactive shells):
+#
+#   cd /opt/pytorch-hccl-tests
+#   npu-smi info
+#   python -c "import torch, pytorch_hccl_tests; print('torch', torch.__version__)"
+#   python -c "import torch_npu; import torch.distributed as dist; print('torch_npu', torch_npu.__version__); print('hccl', getattr(dist, 'is_hccl_available', lambda: 'n/a')())"
+#   pytest tests/test_pytorch_hccl_tests.py tests/test_commons.py -q
+#   torchrun --nnodes 1 --nproc_per_node 2 pytorch_hccl_tests/cli.py --benchmark latency --device cpu
+#   torchrun --nnodes 1 --nproc_per_node 2 pytorch_hccl_tests/cli.py --benchmark latency --device npu
+#   torchrun --nnodes 1 --nproc_per_node 2 pytorch_hccl_tests/cli.py --benchmark allreduce --device npu
+#   WORLD_SIZE=4 make allreduce DEVICE=npu
+#
+#   # CANN built-in HCCL op benchmarks (tools/hccl_test; cf. github.com/zzudongxiang/ascend.cl).
+#   # MPICH is prebuilt at /root/mpich (see below); just build the op tests and launch with mpirun:
+#   cd /usr/local/Ascend/ascend-toolkit/latest/tools/hccl_test
+#   make MPI_HOME=/root/mpich ASCEND_DIR=/usr/local/Ascend/ascend-toolkit/latest   # -> ./bin/*_test
+#   mpirun -n 8 ./bin/all_reduce_test -b 8 -e 2048M -f 2 -p 8   # -b min -e max -f step-factor -p ranks
+#   mpirun -n 8 ./bin/alltoall_test   -b 8 -e 2048M -f 2 -p 8   # bin/ also has all_gather/reduce/scatter/...
+
+ARG CANN_VERSION=9.0.0
+# TODO(reproducibility): the tag is mutable — pin by digest. Get it with:
+#   skopeo inspect docker://quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12 | jq -r .Digest
+# then append @sha256:<digest> to the FROM line below (keep the ARG-based tag for traceability).
+FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
+
+ARG CANN_VERSION=9.0.0
+ARG INSTALL_PREFIX=/opt
+
+ENV CANN_VERSION=${CANN_VERSION} \
+    INSTALL_PREFIX=${INSTALL_PREFIX}
+
+# CANN_HOME and /usr/local/Ascend/ascend-toolkit/latest are two names for the
+# same toolkit ('latest' is a symlink to cann-${CANN_VERSION}). The libhccl.so
+# assertion further below validates CANN_HOME resolves at build time.
+ENV CANN_HOME=/usr/local/Ascend/cann-${CANN_VERSION}
+ENV PT_HCCL_DIR=${INSTALL_PREFIX}/pytorch-hccl-tests \
+    PT_HCCL_VENV=${INSTALL_PREFIX}/venvs/pytorch-hccl-tests
+
+ARG PT_HCCL_REPO_URL=https://github.com/georgebisbas/pytorch-hccl-tests.git
+ARG PT_HCCL_COMMIT=53a6734b085d9559fc069351747be2ca8663d6ff
+
+# Provenance: record the benchmark repo ref baked into this image.
+LABEL org.opencontainers.image.revision="${PT_HCCL_COMMIT}" \
+      org.opencontainers.image.source="${PT_HCCL_REPO_URL}"
+
+# PIP_NO_CACHE_DIR=1 disables the wheel cache for ALL pip invocations, including
+# the ones inside `make ${PT_HCCL_INSTALL_TARGET}` — keeps the venv layer lean.
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# torch-npu 2.9.0 ships cp310 wheels only -> we run a Python 3.10 venv even
+# though the base image carries py3.12. Do NOT drop python3.10 without first
+# confirming a matching torch-npu wheel exists for the newer interpreter.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      git ca-certificates curl make gcc g++ python3.10 python3.10-venv \
+      ripgrep nano \
+      bash-completion gh && \
+    rm -rf /var/lib/apt/lists/*
+
+# Full clone (with .git) so the checkout is a usable, fully-offline git repo
+# inside the container: git status/log/diff over complete history, and a real
+# `master` branch you can edit and `git pull` to advance. The local master is
+# pinned to PT_HCCL_COMMIT for build reproducibility (so it matches the OCI
+# revision LABEL below); advance it later with `git pull origin master`.
+RUN git clone "${PT_HCCL_REPO_URL}" "${PT_HCCL_DIR}" && \
+    if ! git -C "${PT_HCCL_DIR}" cat-file -e "${PT_HCCL_COMMIT}^{commit}" 2>/dev/null; then \
+      git -C "${PT_HCCL_DIR}" fetch origin "${PT_HCCL_COMMIT}"; \
+    fi && \
+    git -C "${PT_HCCL_DIR}" checkout -B master "${PT_HCCL_COMMIT}"
+
+WORKDIR ${PT_HCCL_DIR}
+
+# `make ${PT_HCCL_INSTALL_TARGET}` installs the package non-editably
+# (`pip install .`, a flat copy of the `pytorch_hccl_tests/` package into
+# site-packages). That copy SHADOWS a later `pip install -e .` on sys.path, so
+# the working tree would NOT be authoritative and `git checkout <branch>` inside
+# the container yields ImportErrors (the copy stays frozen at the build commit).
+# `pip uninstall` ALONE is not enough: a `pip install .` of a flat-layout
+# package can leave the copied dir / dist-info behind, which keeps shadowing the
+# editable install — so we explicitly rm the leftover from purelib, then install
+# editable. The build then ASSERTS the package resolves under ${PT_HCCL_DIR}
+# (not site-packages); if a copy ever shadows again, the build fails loudly
+# instead of shipping an image where branch switches silently don't take effect.
+# With this, switching branches (e.g. feat/osu-mbw-mr to use `mbw-mr`) takes
+# effect immediately with no reinstall.
+
+ARG PT_HCCL_INSTALL_TARGET=install-npu-arm
+
+RUN python3.10 -m venv "${PT_HCCL_VENV}" && \
+    . "${PT_HCCL_VENV}/bin/activate" && \
+    python -m pip install --upgrade pip && \
+    pip install pytest && \
+    pip install -r requirements_plotting.txt && \
+    make "${PT_HCCL_INSTALL_TARGET}" && \
+    pip uninstall -y pytorch_hccl_tests && \
+    SP="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" && \
+    rm -rf "${SP}/pytorch_hccl_tests" "${SP}"/pytorch_hccl_tests-*.dist-info "${SP}"/pytorch_hccl_tests-*.egg-link && \
+    pip install -e . && \
+    pip install PyYAML && \
+    RESOLVED="$(python -c 'import pytorch_hccl_tests as p; print(p.__file__)')" && \
+    echo "pytorch_hccl_tests resolved to ${RESOLVED}" && \
+    case "${RESOLVED}" in \
+      "${PT_HCCL_DIR}"/*) echo "OK: editable install authoritative (working tree wins)";; \
+      *) echo "ERROR: pytorch_hccl_tests resolves to ${RESOLVED}, not under ${PT_HCCL_DIR}; a site-packages copy is shadowing the editable install" && exit 1;; \
+    esac
+
+# Remove set_env.sh auto-sourcing from ALL system/user startup files.
+# The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.
+# All required env vars are set via ENV below; source manually when needed.
+RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.bash_profile; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done && \
+    for f in /etc/profile.d/*.sh; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done
+
+RUN echo "[ -d ${PT_HCCL_VENV} ] && source ${PT_HCCL_VENV}/bin/activate" >> /etc/bash.bashrc && \
+    echo "export OMP_NUM_THREADS=1" >> /etc/bash.bashrc
+
+ENV PATH=${PT_HCCL_VENV}/bin:${PATH}
+ENV ASCEND_HOME_PATH=${CANN_HOME} \
+    ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp \
+    MPI_HOME=/usr
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+
+RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
+        && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \
+        && exit 1)
+# LD_PRELOAD is NOT set — this image uses torch_npu HCCL, not host_runtime.so weak symbols.
+
+# torch_npu bundles its own HCCL/ACL bindings, so torchrun HCCL benchmarks only
+# need CANN's python/site-packages on PYTHONPATH. The opp/.../ai_core/tbe entries
+# are for on-device op COMPILATION (TBE), which these benchmarks do not perform —
+# dropped to slim the env and avoid shadowing. If you ever run a kernel-compiling
+# workload in this image, restore:
+#   :${CANN_HOME}/opp/built-in/op_impl/ai_core/tbe
+#   :/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe
+ENV PYTHONPATH=${CANN_HOME}/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages
+
+# ── MPICH for the CANN built-in HCCL op benchmarks (tools/hccl_test) ──────────
+# tools/hccl_test (cf. github.com/zzudongxiang/ascend.cl) compiles against mpi.h
+# and links libmpi, then launches the *_test binaries with mpirun. The hccl_test
+# *sources* ship in CANN, but the MPICH source tarball does NOT — it must be
+# fetched (the upstream guide has you download it by hand). We build it into
+# /root/mpich: use a tarball already under tools/hccl_test if a CANN layout
+# provides one, else download the pinned release from mpich.org (the image
+# already requires network at build). --disable-fortran avoids a Fortran toolchain.
+# We do NOT touch the existing MPI_HOME=/usr above (used by the torch path); the
+# hccl_test Makefile is pointed at this MPICH explicitly via `make MPI_HOME=/root/mpich`.
+ARG MPICH_VERSION=4.2.0
+ENV MPICH_HOME=/root/mpich
+RUN set -eux; \
+    mkdir -p /tmp/mpich-build; \
+    bundled="$(ls ${CANN_HOME}/tools/hccl_test/mpich-${MPICH_VERSION}.tar.gz \
+                  /usr/local/Ascend/ascend-toolkit/latest/tools/hccl_test/mpich-${MPICH_VERSION}.tar.gz \
+                  2>/dev/null | head -n1 || true)"; \
+    if [ -n "$bundled" ]; then \
+      echo "using bundled MPICH tarball: $bundled"; \
+      tar -xzf "$bundled" -C /tmp/mpich-build; \
+    else \
+      echo "downloading MPICH ${MPICH_VERSION} from mpich.org"; \
+      curl -fsSL "https://www.mpich.org/static/downloads/${MPICH_VERSION}/mpich-${MPICH_VERSION}.tar.gz" \
+        -o /tmp/mpich-build/mpich.tar.gz; \
+      tar -xzf /tmp/mpich-build/mpich.tar.gz -C /tmp/mpich-build; \
+    fi; \
+    cd "/tmp/mpich-build/mpich-${MPICH_VERSION}/"; \
+    ./configure --prefix="${MPICH_HOME}" --disable-fortran; \
+    make -j"$(nproc)"; \
+    make install; \
+    cd /; rm -rf /tmp/mpich-build; \
+    "${MPICH_HOME}/bin/mpichversion"
+# Put MPICH (mpirun/mpicc/mpiexec) on PATH ahead of the venv (no name clashes).
+# Also add MPICH lib to LD_LIBRARY_PATH so hccl_test binaries find libmpi.so.12 at runtime.
+ENV PATH=${MPICH_HOME}/bin:${PATH} \
+    LD_LIBRARY_PATH=${MPICH_HOME}/lib:${LD_LIBRARY_PATH}
+
+WORKDIR ${PT_HCCL_DIR}
+CMD ["bash"]

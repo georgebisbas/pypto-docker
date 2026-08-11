@@ -1,0 +1,175 @@
+# Standalone simpler dev image for Ascend 910B
+#
+# No local files required — everything is cloned from GitHub at build time.
+# No build context needed; build from any directory.
+# No pypto dependency — clones and builds only simpler + pto-isa.
+#
+# All paths are driven by build args:
+#   CANN_VERSION    (default: 9.0.0)  — selects base image tag and all cann-* paths
+#   INSTALL_PREFIX  (default: /opt)   — root for simpler and pto-isa installs
+#   SIMPLER_COMMIT  (default: 8616c736ba39edbdf12fd02b90c382b72b470f23) — simpler commit to build from; changing it busts cache
+#   PTO_ISA_COMMIT  (default: 83d01313d9bfc247c4b7c8bcf969d1019f0d106f) — pto-isa commit from simpler's pto_isa.pin at main
+#
+# REQUIREMENTS:
+#   - Internet access during build (GitHub)
+#   - Ascend 910B NPUs + host driver at runtime
+#   - CANN >= 9.0.0: libopapi.so must export aclnnShmemSdmaStarsQuery
+#     (absent in CANN 8.5.0) for comm_alloc_windows / SDMA workspace.
+#
+# SCOPE (this image): real NPU execution on Ascend 910B (a2a3 platform).
+#   simpler upstream supports simulator platforms (a2a3sim/a5sim), but this image
+#   is tuned and validated for onboard hardware workflows.
+#
+# BUILD:
+#   docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0
+#
+# BUILD (pinned simpler + pinned pto-isa):
+#   docker build --build-arg SIMPLER_COMMIT=8616c736ba39edbdf12fd02b90c382b72b470f23 --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t simpler-cann9 - < Dockerfile.simpler.cann9.0
+#
+# RUN (single-device):
+#   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
+#
+# RUN (multi-device, distributed / HCCL — MUST use --pid=host):
+#   docker run --rm -it --privileged --ipc=host --pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
+#
+# NOTE: Do NOT mount /usr/local/Ascend from host.
+#   This image already contains CANN; only /usr/local/Ascend/driver is needed.
+#   HCCL: use --pid=host at docker run; export LD_PRELOAD in shell before HCCL lines below (not image-wide).
+#
+# COMMON COMMANDS INSIDE CONTAINER (copy-paste; defaults: INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0):
+#
+#   cd /opt/simpler
+#   pip install --no-build-isolation .
+#   python -m pytest tests/ut -m "not requires_hardware" -v --clone-protocol https
+#   python -m pytest tests -m requires_hardware --platform a2a3 --device 0,1,2,3 -v --ignore=tests/ut/py/test_worker/test_platform_comm.py
+#   python -m pytest tests/st -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
+#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   python -m pytest tests/ut/py/test_worker/test_platform_comm.py -m requires_hardware --platform a2a3 --device 0,1,2,3 -v
+#   python examples/workers/l3/allreduce/main.py -p a2a3 -d 0-1
+#   python examples/workers/l3/ep_dispatch_combine/main.py -p a2a3 -d 0-1
+#   python examples/workers/l3/ffn_tp_parallel/main.py -p a2a3 -d 0-1
+#   python examples/workers/l3/multi_chip_dispatch/main.py -p a2a3 -d 0-1
+
+ARG CANN_VERSION=9.0.0
+FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
+
+ARG CANN_VERSION=9.0.0
+ARG INSTALL_PREFIX=/opt
+
+ENV CANN_VERSION=${CANN_VERSION} \
+    INSTALL_PREFIX=${INSTALL_PREFIX}
+
+# Derived paths.
+ENV CANN_HOME=/usr/local/Ascend/cann-${CANN_VERSION}
+ENV SIMPLER_DIR=${INSTALL_PREFIX}/simpler \
+    PTO_ISA_DIR=${INSTALL_PREFIX}/pto-isa
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_CACHE_DIR=/tmp/pip-cache
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      git curl ca-certificates \
+      ccache \
+      build-essential cmake ninja-build pkg-config \
+      mpich libmpich-dev \
+      ripgrep nano \
+      bash-completion gh && \
+    if ! command -v g++-15 >/dev/null 2>&1; then \
+      ln -sf "$(command -v g++)" /usr/local/bin/g++-15; \
+    fi && \
+    if ! command -v gcc-15 >/dev/null 2>&1; then \
+      ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CC=gcc-15 \
+    CXX=g++-15
+
+ARG SIMPLER_COMMIT=8616c736ba39edbdf12fd02b90c382b72b470f23
+
+# Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
+RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
+    git -C "${SIMPLER_DIR}" checkout "${SIMPLER_COMMIT}"
+
+WORKDIR ${SIMPLER_DIR}
+
+# PTO_ISA_COMMIT defaults to 83d01313d9bfc247c4b7c8bcf969d1019f0d106f — from simpler's pto_isa.pin at main.
+ARG PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f
+
+# Auto-derive PTO_ISA_COMMIT from simpler's pto_isa.pin (the single source of
+# truth; simpler CI reads it via .github/actions/read-pto-isa).
+RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
+      PTO_ISA_COMMIT=$(tr -d '[:space:]' < pto_isa.pin); \
+      if ! printf '%s' "${PTO_ISA_COMMIT}" | grep -qE '^[0-9a-f]{40}$'; then \
+        echo "ERROR: pto_isa.pin missing or invalid (expected 40-char hex commit)"; exit 1; \
+      fi; \
+      echo "Auto-derived PTO_ISA_COMMIT=${PTO_ISA_COMMIT} from pto_isa.pin"; \
+    fi && \
+    timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git "${PTO_ISA_DIR}" \
+      || { rm -rf "${PTO_ISA_DIR}"; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git "${PTO_ISA_DIR}"; } && \
+    git -C "${PTO_ISA_DIR}" checkout "${PTO_ISA_COMMIT}" && \
+    git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
+
+ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
+
+# Python build toolchain.
+RUN python3 -m pip install --upgrade pip setuptools wheel && \
+    pip install \
+      "scikit-build-core>=0.10.0" \
+      "nanobind>=2.0.0" \
+      "ninja>=1.11.0" \
+      "cmake>=3.15"
+
+# Runtime / test dependencies.
+RUN pip install \
+      "numpy>=2.0" \
+      "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0"
+
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Build and install simpler C++ extension.
+RUN rm -rf ./build && \
+    pip install --no-build-isolation .
+
+# Remove set_env.sh auto-sourcing from ALL system/user startup files.
+# The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.
+# All required env vars are set via ENV below; source manually when needed.
+RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.bash_profile; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done && \
+    for f in /etc/profile.d/*.sh; do \
+      [ -f "$f" ] && sed -i '/set_env\.sh/d' "$f" || true; \
+    done
+
+# Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
+RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
+
+ENV ASCEND_HOME_PATH=${CANN_HOME} \
+    PTO_TILE_LIB_CODE_PATH=${CANN_HOME} \
+    ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp \
+    MPI_HOME=/usr \
+    SIMPLER_ROOT=${SIMPLER_DIR} \
+    PTO_ISA_ROOT=${PTO_ISA_DIR}
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+
+# HCCL: host_runtime.so has WEAK HCCL symbols — without libhccl.so loaded,
+# comm_init can SIGSEGV. Do NOT set LD_PRELOAD image-wide (VS Code attach hang).
+# Before HCCL tests/examples, export in your shell:
+#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+# Run-side: container MUST use --pid=host (see RUN section above).
+RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
+        && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \
+        && exit 1)
+# VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
+# override per-container via ~/.devcontainer/devcontainer.json: {"userEnvProbe": "none"}
+
+ENV PYTHONPATH=${SIMPLER_DIR}/python:${SIMPLER_DIR}/examples/scripts
+ENV PYTHONPATH=${PYTHONPATH}:${CANN_HOME}/python/site-packages:${CANN_HOME}/opp/built-in/op_impl/ai_core/tbe
+ENV PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe
+
+WORKDIR ${SIMPLER_DIR}
+CMD ["bash"]

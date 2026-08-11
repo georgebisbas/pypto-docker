@@ -1,0 +1,70 @@
+# pypto-lib simulation image (x86_64, no NPU required)
+#
+# Purpose:
+#   Run pypto-lib examples and model scripts on a2a3sim / a5sim.
+#   Extends the pypto simulation toolchain image with a baked pypto-lib checkout.
+#
+# Prerequisite base image (build once):
+#   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#
+# BUILD (defaults — pypto-lib main):
+#   docker build -t pypto-lib-hw-native-sys:sim -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
+#
+# BUILD (pinned pypto-lib commit):
+#   docker build \
+#     --build-arg PYPTO_LIB_COMMIT=b97d959f088d19336f2ca3f6a9d539c5eb78444d \
+#     -t pypto-lib-hw-native-sys:sim \
+#     -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
+#
+# BUILD (custom base image tag, e.g. after rebuilding pypto sim):
+#   docker build \
+#     --build-arg BASE_IMAGE=pypto3-hw-native-sys:sim \
+#     --build-arg PYPTO_COMMIT=<sha> \
+#     -t pypto-lib-hw-native-sys:sim \
+#     -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
+#
+# RUN:
+#   docker run --rm -it --shm-size=4g pypto-lib-hw-native-sys:sim
+#
+# LOCAL ITERATION (mount worktrees — do not rebuild the image for code edits):
+#   docker run --rm -it --shm-size=4g \
+#     -v /path/to/pypto:/opt/pypto \
+#     -v /path/to/pypto-lib:/opt/pypto-lib \
+#     pypto-lib-hw-native-sys:sim
+#
+# QUICK CHECKS INSIDE CONTAINER:
+#   cd /opt/pypto-lib
+#   python -c "import pypto; import golden; print('ok')"
+#   python examples/beginner/hello_world.py -p a2a3sim
+#   python examples/advanced/allreduce.py -p a2a3sim
+#   python models/deepseek/v4-flash/moe.py -p a2a3sim
+#   pytest tests/golden -v
+#
+# PRE-COMMIT (pypto-lib):
+#   cd /opt/pypto-lib
+#   pre-commit run --all-files
+#
+# REINSTALL pypto AFTER MOUNTING A LOCAL BRANCH:
+#   pip install --no-build-isolation -e '/opt/pypto[dev]'
+
+ARG BASE_IMAGE=pypto3-hw-native-sys:sim
+FROM ${BASE_IMAGE}
+
+ARG INSTALL_PREFIX=/opt
+ARG PYPTO_LIB_COMMIT=main
+
+ENV PYPTO_LIB_DIR=${INSTALL_PREFIX}/pypto-lib
+
+RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto-lib.git "${PYPTO_LIB_DIR}" && \
+    if [ "${PYPTO_LIB_COMMIT}" != "main" ]; then \
+      if ! git -C "${PYPTO_LIB_DIR}" cat-file -e "${PYPTO_LIB_COMMIT}^{commit}" 2>/dev/null; then \
+        git -C "${PYPTO_LIB_DIR}" fetch origin "${PYPTO_LIB_COMMIT}"; \
+      fi && \
+      git -C "${PYPTO_LIB_DIR}" checkout "${PYPTO_LIB_COMMIT}"; \
+    fi && \
+    git -C "${PYPTO_LIB_DIR}" rev-parse --short HEAD
+
+WORKDIR ${PYPTO_LIB_DIR}
+ENV PYTHONPATH=${PYPTO_LIB_DIR}
+
+CMD ["bash"]
