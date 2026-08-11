@@ -4,7 +4,7 @@ Dockerfiles, image build scripts, and runtime guidance for the PyPTO / simpler /
 pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 simulation.
 
 > Split out of the [`pypto-tooling`](../pypto-tooling/) umbrella. Construction knowledge and
-> incident logs live in `../pypto-tooling/dockerfile_skills/`; NPU/docker debugging in
+> incident logs live in `dockerfile_skills/`; NPU/docker debugging in
 > `../pypto-tooling/debugging_skills/`; the profiling harness in
 > [`../pypto-profiling`](../pypto-profiling/); the MCP server in
 > [`../mcp-hw-native-sys`](../mcp-hw-native-sys/).
