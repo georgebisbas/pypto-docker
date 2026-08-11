@@ -13,7 +13,7 @@
 #   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 #
 # BUILD (pinned commits):
-#   docker build --build-arg PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56 --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#   docker build --build-arg PYPTO_COMMIT=df3ac12270090d0a22481d0a617c512196214620 --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 #
 # RUN:
 #   docker run --rm -it pypto3-hw-native-sys:sim
@@ -120,7 +120,7 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
       torch --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
-ARG PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56
+ARG PYPTO_COMMIT=df3ac12270090d0a22481d0a617c512196214620
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -152,14 +152,14 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
     git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
 
 # Install ptoas x86_64 used by simulator CI jobs (wheel from GitHub Release).
-ARG PTOAS_VERSION=v0.54
-ARG PTOAS_WHEEL_SHA256=b25a9804d307b6573ff15b88129485c416477f2567fe54f73105693b77532305
+ARG PTOAS_VERSION=v0.57
+ARG PTOAS_WHEEL_SHA256=ee86289cd61433c1226774dd6a5a884ee0c8e6c42003d78201ff39e8aec4b304
 RUN curl --fail --location --retry 3 --retry-all-errors \
-      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl" \
-      -o /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl && \
-    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
-    python3 -m pip install /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl && \
-    rm -f /tmp/ptoas-0.54-cp310-cp310-manylinux_2_34_x86_64.whl
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl" \
+      -o /tmp/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
+    python3 -m pip install /tmp/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    rm -f /tmp/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl
 
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 

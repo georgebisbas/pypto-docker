@@ -9,7 +9,7 @@
 #   PYPTO_COMMIT    (default: full SHA of github main) — must exist on github.com/hw-native-sys/pypto
 #                   Use 40-char SHA when pinning an older commit (GitHub fetch rejects short SHAs).
 #   PTO_ISA_COMMIT  (default: auto)     — pto-isa commit; auto-derived from runtime/pto_isa.pin if not set
-#   PTOAS_VERSION   (default: v0.54)    — PTOAS release (must match pypto CI)
+#   PTOAS_VERSION   (default: v0.57)    — PTOAS release (must match pypto CI)
 #
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
@@ -24,7 +24,7 @@
 #   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # BUILD (custom prefix / pinned pto-isa / different commit):
-#   docker build --build-arg PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#   docker build --build-arg PYPTO_COMMIT=df3ac12270090d0a22481d0a617c512196214620 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # RUN (single-device, NO HCCL):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
@@ -154,7 +154,7 @@ RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
 # GitHub does not allow shallow-fetching arbitrary SHAs directly.
-ARG PYPTO_COMMIT=08f6c70f6ea0f5b752b5e7ee08aede07374cbb56
+ARG PYPTO_COMMIT=df3ac12270090d0a22481d0a617c512196214620
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -206,8 +206,8 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
 # Install PTOAS binary.
-ARG PTOAS_VERSION=v0.54
-ARG PTOAS_SHA256=011e980dbc46c796e31a1b213051d943ba8eb4c67d356ae6bda2148fe512964a
+ARG PTOAS_VERSION=v0.57
+ARG PTOAS_SHA256=4858c837e12b1b588f281207c95916dc20968a7cdc656aadd549a87658a06692
 RUN curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-bin-aarch64.tar.gz" \
       -o /tmp/ptoas-bin-aarch64.tar.gz && \

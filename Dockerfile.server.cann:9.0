@@ -137,8 +137,8 @@ RUN timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git /opt/pto-i
 ENV PTO_ISA_ROOT=/opt/pto-isa
 
 # Install PTOAS (required by PTOAS strategy tests in tests/st/codegen).
-ARG PTOAS_VERSION=v0.54
-ARG PTOAS_SHA256=011e980dbc46c796e31a1b213051d943ba8eb4c67d356ae6bda2148fe512964a
+ARG PTOAS_VERSION=v0.57
+ARG PTOAS_SHA256=4858c837e12b1b588f281207c95916dc20968a7cdc656aadd549a87658a06692
 RUN curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-bin-aarch64.tar.gz" \
       -o /tmp/ptoas-bin-aarch64.tar.gz && \
