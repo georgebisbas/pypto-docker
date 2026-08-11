@@ -79,7 +79,7 @@ Build standalone simpler image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=85a04b0100a30232b35dffb39af57a17e0904bb0 \
+  --build-arg SIMPLER_COMMIT=c5a587400721ea98f0a00321569088a5321539b9 \
   --build-arg PTO_ISA_COMMIT=0cefc9a5a1c24c62655cc345d408559595a8af32 \
   -t simpler-cann9 \
   - < Dockerfile.simpler.cann9.0
@@ -122,7 +122,7 @@ Build standalone simpler simulation image (pinned commits):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=85a04b0100a30232b35dffb39af57a17e0904bb0 \
+  --build-arg SIMPLER_COMMIT=c5a587400721ea98f0a00321569088a5321539b9 \
   --build-arg PTO_ISA_COMMIT=0cefc9a5a1c24c62655cc345d408559595a8af32 \
   -t simpler-hw-native-sys:sim \
   -f Dockerfile.simpler.sim.ubuntu22.04 .
@@ -139,7 +139,7 @@ Build pypto-lib simulation image (pinned pypto-lib commit):
 
 ```bash
 docker build \
-  --build-arg PYPTO_LIB_COMMIT=6eb3b0f4b9227f04b2e9ecba2065ad464021bece \
+  --build-arg PYPTO_LIB_COMMIT=c9a55a0de4de7142da967416f5dc6dc38702b566 \
   -t pypto-lib-hw-native-sys:sim \
   -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```
