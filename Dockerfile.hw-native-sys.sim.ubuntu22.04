@@ -13,7 +13,16 @@
 #   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 #
 # BUILD (pinned commits):
-#   docker build --build-arg PYPTO_COMMIT=df3ac12270090d0a22481d0a617c512196214620 --build-arg PTO_ISA_COMMIT=83d01313d9bfc247c4b7c8bcf969d1019f0d106f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#
+#   Prefer the bare form above: pto-isa is auto-derived from the pinned
+#   runtime/pto_isa.pin, so it always matches the pypto commit being built.
+#   Only pass PYPTO_COMMIT to build a different revision:
+#
+#   docker build --build-arg PYPTO_COMMIT=<sha> -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+#
+#   Do NOT pass PTO_ISA_COMMIT unless you deliberately want to override the
+#   pin — a hardcoded value silently drifts from the runtime it builds against.
 #
 # RUN:
 #   docker run --rm -it pypto3-hw-native-sys:sim
@@ -27,11 +36,11 @@
 #   pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a5sim
 #
 # EXAMPLES (inside container, copy/paste one-liners):
-#   cd /opt/pypto && python examples/hello_world.py
+#   cd /opt/pypto && python examples/beginner/01_hello_world.py
 #   cd /opt/pypto && python examples/models/01_ffn.py
 #
 # EXPECTED OUTPUT WHEN EXAMPLES SUCCEED:
-#   - hello_world.py prints a final line: OK
+#   - 01_hello_world.py prints a final line: OK
 #   - model examples print [perf_hint] lines with paths under build_output/.../report/perf_hints.log
 #   - INFO_V9 scheduler/swimlane logs are expected in sim mode (timing + tasks_scheduled summaries)
 #   - non-fatal deprecation warnings may appear; run is still considered successful if process exits 0
@@ -120,7 +129,7 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
       torch --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
-ARG PYPTO_COMMIT=df3ac12270090d0a22481d0a617c512196214620
+ARG PYPTO_COMMIT=e1ea278fab017aa4062160fe93dee719767f09f4
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -161,6 +170,13 @@ RUN curl --fail --location --retry 3 --retry-all-errors \
     python3 -m pip install /tmp/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl && \
     rm -f /tmp/ptoas-0.57-cp310-cp310-manylinux_2_34_x86_64.whl
 
+# PTO_ISA_ROOT is NO LONGER read by the pypto runtime to select the pto-isa
+# checkout (pypto PR #2410 deleted pypto's own resolver and delegates to
+# simpler_setup.pto_isa, for which runtime/pto_isa.pin is the only truth —
+# an exported PTO_ISA_ROOT is deliberately ignored and gets overwritten with
+# the resolved path). It is kept here only because downstream extern-CCE-kernel
+# builds still read it for the ISA include directory. The pre-clone above
+# therefore no longer pre-warms the runtime's checkout; simpler manages its own.
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
 WORKDIR ${PYPTO_DIR}
