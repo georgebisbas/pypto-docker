@@ -71,6 +71,26 @@ Each Dockerfile pins specific external versions. When asked to update one, run t
 
 **PTOAS versions are not monotonic.** `versions.env` can move *backwards*: pypto bumped to v0.50 (#2076) then reverted to v0.48 (#2138) because that ptoas build was buggy. Always take the version from `versions.env` at the pypto commit you pin — never carry forward a higher number just because you set it last time, and never bump ahead of `versions.env` even when newer PTOAS releases exist.
 
+**PTOAS is a cp310 wheel, not the old tarball.** Since PR #2291 (v0.57), the `PTOAS_SHA256_{AARCH64,X86_64}` in `versions.env` are the digests of the **CPython 3.10 manylinux wheel** (`ptoas-<ver>-cp310-cp310-manylinux_2_34_<arch>.whl`), *not* the `ptoas-bin-aarch64.tar.gz` tarball. The wheel has a `cp310` ABI tag, so it cannot be `pip install`ed by the CANN base image's Python 3.12. Install it into a dedicated `python3.10` venv (`python3.10` + `python3.10-venv` are in Ubuntu 22.04's standard repos — jammy's native Python *is* 3.10, so no deadsnakes PPA is needed):
+
+```dockerfile
+ARG PTOAS_VERSION=v0.57
+ARG PTOAS_SHA256=4858c837e12b1b588f281207c95916dc20968a7cdc656aadd549a87658a06692
+RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
+    curl --fail --location --retry 3 --retry-all-errors \
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
+      -o "/tmp/${PTOAS_WHEEL}" && \
+    echo "${PTOAS_SHA256}  /tmp/${PTOAS_WHEEL}" | sha256sum -c - && \
+    python3.10 -m venv "${PTOAS_DIR}" && \
+    "${PTOAS_DIR}/bin/python" -m pip install "/tmp/${PTOAS_WHEEL}" && \
+    "${PTOAS_DIR}/bin/ptoas" --version && \
+    rm -f "/tmp/${PTOAS_WHEEL}"
+```
+
+The tarball still exists but is now built for CPython 3.11 (its `.so` files are `cpython-311`, and it ships a `.ptoas-python-version = 3.11` marker) — do not use it, and do not pin its SHA anywhere: only the wheel SHA is tracked in `versions.env`.
+
+The wheel's C++ extensions require **`GLIBCXX_3.4.29`** (`strings ptoas/_core*.so | grep GLIBCXX`). pypto's own CI works around this with conda's libstdc++ because its self-hosted runners sit on older device hosts, but Ubuntu 22.04's stock `libstdc++6` (GCC 11.4) already provides `GLIBCXX_3.4.30`, so **no conda workaround is needed** in the CANN images. The trailing `ptoas --version` probe is kept deliberately: it makes the image fail at build time (not at first `pytest`) if the wheel's ABI/glibc/libstdc++ contract is ever broken.
+
 ### `Dockerfile.simpler.cann9.0` — simpler + pto-isa only
 
 | # | Check | Command | What to update if drifted |
@@ -90,7 +110,7 @@ Note: No PTOAS or pypto dependencies — simpler-only image.
 | 2 | pto-isa commit changed? | Read `pypto/runtime/pto_isa.pin` — the single source of truth (auto-derived at Docker build time). | Auto-derived; no ARG update needed unless you want to hard-pin via `--build-arg` |
 | 3 | PTOAS x86_64 version/SHA256 changed? | Read `pypto/toolchain/versions.env` — use the **x86_64** SHA256 (`PTOAS_SHA256_X86_64`) from that file | `ARG PTOAS_VERSION` + `ARG PTOAS_SHA256` (x86_64 binary) |
 
-Note: Uses **x86_64** `ptoas-bin-x86_64.tar.gz` with a **different SHA256** than the aarch64 binary used in hw-native-sys.
+Note: Uses the **x86_64** cp310 wheel (`ptoas-<ver>-cp310-cp310-manylinux_2_34_x86_64.whl`) with a **different SHA256** (`PTOAS_SHA256_X86_64`) than the aarch64 wheel used in hw-native-sys. `ubuntu:22.04` is natively Python 3.10, so no venv is needed — it `pip install`s straight into the base interpreter.
 
 ### `Dockerfile.simpler.sim.ubuntu22.04` — simpler + pto-isa (x86_64 sim)
 
@@ -245,7 +265,7 @@ ENV PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/.../opp/...
 ```
 [ ] 1. Clone source repos (pypto/simpler)
 [ ] 2. Clone pto-isa (needed by simpler kernel compilation)
-[ ] 3. Install PTOAS binary (needed by pypto tests; NOT needed by simpler-only)
+[ ] 3. Install PTOAS cp310 wheel into a python3.10 venv (needed by pypto tests; NOT needed by simpler-only)
 [ ] 4. pip install scikit-build-core nanobind cmake ninja
 [ ] 5. pip install numpy pytest torch (CPU, unversioned — matches CI)
 [ ] 6. pip install --no-build-isolation ./runtime   ← simpler MUST be built before pypto
@@ -455,7 +475,7 @@ npu-smi info
 | simpler | `github.com/hw-native-sys/simpler.git` | pypto submodule at `runtime/` |
 | pto-isa | `github.com/hw-native-sys/pto-isa.git` | kernel ISA headers |
 | pto-isa mirror | `gitcode.com/luohuan40/pto-isa.git` | fallback |
-| PTOAS | `github.com/hw-native-sys/PTOAS/releases/download/${VER}/ptoas-bin-aarch64.tar.gz` | binary tarball |
+| PTOAS | `github.com/hw-native-sys/PTOAS/releases/download/${VER}/ptoas-<ver>-cp310-cp310-manylinux_2_34_<arch>.whl` | CPython 3.10 manylinux wheel (since PR #2291) |
 | libbacktrace | `github.com/ianlancetaylor/libbacktrace.git` | upstream, default branch (pypto #2146 dropped the `Hzfengsy` fork + `macho-bundle-support` branch) |
 | msgpack-c | `github.com/msgpack/msgpack-c.git` | `cpp_master` branch |
 

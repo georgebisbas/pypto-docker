@@ -113,6 +113,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       git curl ca-certificates software-properties-common gnupg \
+      python3.10 python3.10-venv \
       ccache \
       build-essential cmake ninja-build pkg-config \
       graphviz \
@@ -205,17 +206,20 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
-# Install PTOAS binary.
+# Install PTOAS (cp310 manylinux wheel — mirrors pypto CI's toolchain job since
+# PR #2291). The v0.57 wheel is CPython 3.10-only (cp310 ABI tag), so it is
+# installed into a dedicated python3.10 venv; the base image is Python 3.12.
 ARG PTOAS_VERSION=v0.57
 ARG PTOAS_SHA256=4858c837e12b1b588f281207c95916dc20968a7cdc656aadd549a87658a06692
-RUN curl --fail --location --retry 3 --retry-all-errors \
-      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-bin-aarch64.tar.gz" \
-      -o /tmp/ptoas-bin-aarch64.tar.gz && \
-    echo "${PTOAS_SHA256}  /tmp/ptoas-bin-aarch64.tar.gz" | sha256sum -c - && \
-    mkdir -p "${PTOAS_DIR}" && \
-    tar -xzf /tmp/ptoas-bin-aarch64.tar.gz -C "${PTOAS_DIR}" && \
-    chmod +x "${PTOAS_DIR}/ptoas" "${PTOAS_DIR}/bin/ptoas" && \
-    rm -f /tmp/ptoas-bin-aarch64.tar.gz
+RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
+    curl --fail --location --retry 3 --retry-all-errors \
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
+      -o "/tmp/${PTOAS_WHEEL}" && \
+    echo "${PTOAS_SHA256}  /tmp/${PTOAS_WHEEL}" | sha256sum -c - && \
+    python3.10 -m venv "${PTOAS_DIR}" && \
+    "${PTOAS_DIR}/bin/python" -m pip install "/tmp/${PTOAS_WHEEL}" && \
+    "${PTOAS_DIR}/bin/ptoas" --version && \
+    rm -f "/tmp/${PTOAS_WHEEL}"
 
 # Build simpler runtime extension.
 RUN rm -rf ./runtime/build && \

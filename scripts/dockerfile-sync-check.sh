@@ -170,6 +170,17 @@ else
   DRIFT=1
 fi
 
+# aarch64 images must install the cp310 wheel (not the deprecated cp311 tarball,
+# whose SHA is NOT tracked in versions.env). Catch any regression to the tarball.
+for f in Dockerfile.hw-native-sys.cann9.0 Dockerfile.server.cann:9.0; do
+  if grep -q 'ptoas-bin-aarch64.tar.gz' "$REPO_ROOT/$f"; then
+    err "  DRIFT $f still references the deprecated ptoas-bin-aarch64.tar.gz (use the cp310 wheel)"
+    DRIFT=1
+  else
+    ok "  OK   $f installs PTOAS via cp310 wheel (no tarball)"
+  fi
+done
+
 # ---------------------------------------------------------------------------
 # pto-isa checks.
 #
