@@ -7,8 +7,8 @@
 # All paths are driven by build args:
 #   CANN_VERSION    (default: 9.0.0)  — selects base image tag and all cann-* paths
 #   INSTALL_PREFIX  (default: /opt)   — root for simpler and pto-isa installs
-#   SIMPLER_COMMIT  (default: 1761c75e0775a76a2f2fbdc476ee27d5cb93203a) — simpler commit to build from; changing it busts cache
-#   PTO_ISA_COMMIT  (default: cd4a3d3f7a1a27fcfe536f617e9bca3008929664) — pto-isa commit from simpler's pto_isa.pin at main
+#   SIMPLER_COMMIT  (default: 146370fe5d8050b6a0ba5d1f755b18a9f7af8578) — simpler commit to build from; changing it busts cache
+#   PTO_ISA_COMMIT  (default: be5ccb765a4ce5d14ca5da8b0e2f182d7f003369) — pto-isa commit from simpler's pto_isa.pin at main
 #
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
@@ -24,7 +24,7 @@
 #   docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # BUILD (pinned simpler + pinned pto-isa):
-#   docker build --build-arg SIMPLER_COMMIT=1761c75e0775a76a2f2fbdc476ee27d5cb93203a --build-arg PTO_ISA_COMMIT=cd4a3d3f7a1a27fcfe536f617e9bca3008929664 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
+#   docker build --build-arg SIMPLER_COMMIT=146370fe5d8050b6a0ba5d1f755b18a9f7af8578 --build-arg PTO_ISA_COMMIT=be5ccb765a4ce5d14ca5da8b0e2f182d7f003369 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # RUN (single-device):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
@@ -88,7 +88,7 @@ RUN apt-get update && \
 ENV CC=gcc-15 \
     CXX=g++-15
 
-ARG SIMPLER_COMMIT=1761c75e0775a76a2f2fbdc476ee27d5cb93203a
+ARG SIMPLER_COMMIT=146370fe5d8050b6a0ba5d1f755b18a9f7af8578
 
 # Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
@@ -96,8 +96,8 @@ RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "$
 
 WORKDIR ${SIMPLER_DIR}
 
-# PTO_ISA_COMMIT defaults to cd4a3d3f7a1a27fcfe536f617e9bca3008929664 — from simpler's pto_isa.pin at main.
-ARG PTO_ISA_COMMIT=cd4a3d3f7a1a27fcfe536f617e9bca3008929664
+# PTO_ISA_COMMIT defaults to be5ccb765a4ce5d14ca5da8b0e2f182d7f003369 — from simpler's pto_isa.pin at main.
+ARG PTO_ISA_COMMIT=be5ccb765a4ce5d14ca5da8b0e2f182d7f003369
 
 # Auto-derive PTO_ISA_COMMIT from simpler's pto_isa.pin (the single source of
 # truth; simpler CI reads it via .github/actions/read-pto-isa).
