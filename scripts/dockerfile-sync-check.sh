@@ -199,6 +199,28 @@ check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.simpler.sim.ubuntu22.04" "$PTO_I
 # hw-native-sys / hw-native-sys.sim auto-derive pto-isa from the cloned repo at
 # build time (PTO_ISA_COMMIT= empty), so no pin check needed there.
 
+# ---------------------------------------------------------------------------
+# README example freshness.
+#
+# The build examples in README.md quote concrete commit SHAs. Nothing else here
+# validates them, so they rot silently every time a pin is bumped - they have
+# been found several generations behind while every Dockerfile pin was current.
+# Rule: every 40-hex SHA in README.md must also appear in some Dockerfile, i.e.
+# it must be a pin this repo currently uses.
+# ---------------------------------------------------------------------------
+readme_stale=0
+while read -r sha; do
+  [[ -z "$sha" ]] && continue
+  if ! grep -qF "$sha" "$REPO_ROOT"/Dockerfile.* 2>/dev/null; then
+    err "  DRIFT README.md quotes ${sha:0:12}, which is not a current pin in any Dockerfile"
+    readme_stale=1
+    DRIFT=1
+  fi
+done < <(grep -ohE '[0-9a-f]{40}' "$REPO_ROOT/README.md" 2>/dev/null | sort -u)
+if [[ "$readme_stale" -eq 0 ]]; then
+  ok "  OK   README.md example SHAs all match current Dockerfile pins"
+fi
+
 echo
 if [[ "$DRIFT" -eq 0 ]]; then
   ok "=== All Dockerfile pins are current ==="
