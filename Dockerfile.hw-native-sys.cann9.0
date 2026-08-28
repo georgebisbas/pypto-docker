@@ -9,7 +9,7 @@
 #   PYPTO_COMMIT    (default: full SHA of github main) — must exist on github.com/hw-native-sys/pypto
 #                   Use 40-char SHA when pinning an older commit (GitHub fetch rejects short SHAs).
 #   PTO_ISA_COMMIT  (default: auto)     — pto-isa commit; auto-derived from runtime/pto_isa.pin if not set
-#   PTOAS_VERSION   (default: v0.57)    — PTOAS release (must match pypto CI)
+#   PTOAS_VERSION   (default: v0.60)    — PTOAS release (must match pypto CI)
 #
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
@@ -24,7 +24,7 @@
 #   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # BUILD (custom prefix / pinned pto-isa / different commit):
-#   docker build --build-arg PYPTO_COMMIT=9561f2943efde578da6149a43060d01cf7f8630c -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#   docker build --build-arg PYPTO_COMMIT=28cf265e2ea20160631f78b9a36f6f8d29e6ab33 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # RUN (single-device, NO HCCL):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
@@ -37,7 +37,7 @@
 # COMMANDS INSIDE CONTAINER — mirrors pypto .github/workflows/ci.yml job order.
 #   INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0. CANN env is sourced from bash.bashrc.
 #   Device lists are inlined below (change 0,1,2,3 / 0 to match your host).
-#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently cd4a3d3f7a1a27fcfe536f617e9bca3008929664)
+#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently be5ccb765a4ce5d14ca5da8b0e2f182d7f003369)
 #   unless PTO_ISA_COMMIT was overridden at build.
 #
 #   cd /opt/pypto
@@ -155,7 +155,7 @@ RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
 # GitHub does not allow shallow-fetching arbitrary SHAs directly.
-ARG PYPTO_COMMIT=9561f2943efde578da6149a43060d01cf7f8630c
+ARG PYPTO_COMMIT=28cf265e2ea20160631f78b9a36f6f8d29e6ab33
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -207,10 +207,10 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
 # Install PTOAS (cp310 manylinux wheel — mirrors pypto CI's toolchain job since
-# PR #2291). The v0.57 wheel is CPython 3.10-only (cp310 ABI tag), so it is
+# PR #2291). The wheel is CPython 3.10-only (cp310 ABI tag), so it is
 # installed into a dedicated python3.10 venv; the base image is Python 3.12.
-ARG PTOAS_VERSION=v0.57
-ARG PTOAS_SHA256=4858c837e12b1b588f281207c95916dc20968a7cdc656aadd549a87658a06692
+ARG PTOAS_VERSION=v0.60
+ARG PTOAS_SHA256=7ebc8bb45fd5a5a0b55c918227fe2194a7e33a7f3bd4b5ab64005a51717cb08e
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
