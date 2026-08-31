@@ -141,8 +141,8 @@ ENV PTO_ISA_ROOT=/opt/pto-isa
 # cp310 manylinux wheel (mirrors pypto CI's toolchain job since PR #2291).
 # The wheel is CPython 3.10-only (cp310 ABI tag), so it is installed into
 # a dedicated python3.10 venv; the base image is Python 3.12.
-ARG PTOAS_VERSION=v0.60
-ARG PTOAS_SHA256=7ebc8bb45fd5a5a0b55c918227fe2194a7e33a7f3bd4b5ab64005a51717cb08e
+ARG PTOAS_VERSION=v0.57
+ARG PTOAS_SHA256=4858c837e12b1b588f281207c95916dc20968a7cdc656aadd549a87658a06692
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
