@@ -12,7 +12,7 @@
 #
 # BUILD (pinned pypto-lib commit):
 #   docker build \
-#     --build-arg PYPTO_LIB_COMMIT=a4d4e7adbd3879afe525f7385e6b87b7708d63d7 \
+#     --build-arg PYPTO_LIB_COMMIT=9368299c378a72b8f4f199f30c7611c6d3e9f514 \
 #     -t pypto-lib-hw-native-sys:cann9 \
 #     - < Dockerfile.pypto-lib.cann9.0
 #
