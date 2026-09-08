@@ -12,7 +12,7 @@
 #
 # BUILD (pinned pypto-lib commit):
 #   docker build \
-#     --build-arg PYPTO_LIB_COMMIT=7733dff221bef95dfffa72c243cc3f91229ea8a6 \
+#     --build-arg PYPTO_LIB_COMMIT=c4babe1cc8e38bd67a27d44e5afd222ba687f235 \
 #     -t pypto-lib-hw-native-sys:sim \
 #     -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 #
