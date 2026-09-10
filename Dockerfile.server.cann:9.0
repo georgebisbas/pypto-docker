@@ -232,6 +232,8 @@ RUN test -f "/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so" \
 # VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
 # override per-container via ~/.devcontainer/devcontainer.json: {"userEnvProbe": "none"}
 
+# PTOAS venv's bin/ is appended, never prepended: it carries its own cp310
+# python3/pip pair, which would shadow the system Python that pypto lives in.
 ENV ASCEND_HOME_PATH=/usr/local/Ascend/cann-9.0.0 \
     PTO_TILE_LIB_CODE_PATH=/usr/local/Ascend/cann-9.0.0 \
     ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp \
@@ -240,7 +242,7 @@ ENV ASCEND_HOME_PATH=/usr/local/Ascend/cann-9.0.0 \
     SIMPLER_ROOT=/workspace/hw-native-sys/pypto/runtime \
     PTO_ISA_ROOT=/opt/pto-isa \
     LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-} \
-    PATH=/opt/ptoas-bin:/opt/ptoas-bin/bin:${PATH} \
+    PATH=${PATH}:/opt/ptoas-bin/bin \
     PYTHONPATH=/workspace/hw-native-sys/pypto/runtime/python:/workspace/hw-native-sys/pypto/runtime/examples/scripts \
     PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/cann-9.0.0/python/site-packages:/usr/local/Ascend/cann-9.0.0/opp/built-in/op_impl/ai_core/tbe \
     PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe

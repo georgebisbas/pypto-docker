@@ -269,7 +269,11 @@ RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
 # VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
 # override per-container via ~/.devcontainer/devcontainer.json: {"userEnvProbe": "none"}
 
-ENV PATH=${PTOAS_DIR}:${PTOAS_DIR}/bin:${PATH}
+# Append (never prepend) the PTOAS venv: its bin/ holds the cp310 python3/pip
+# pair created for the ptoas wheel, which would shadow the system Python 3.12
+# that pypto, scikit-build-core, and pytest live in. pypto resolves `ptoas` via
+# PTOAS_ROOT, so PATH order does not affect codegen.
+ENV PATH=${PATH}:${PTOAS_DIR}/bin
 ENV PYTHONPATH=${PYPTO_DIR}/runtime/python:${PYPTO_DIR}/runtime/examples/scripts
 ENV PYTHONPATH=${PYTHONPATH}:${CANN_HOME}/python/site-packages:${CANN_HOME}/opp/built-in/op_impl/ai_core/tbe
 ENV PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe

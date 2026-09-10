@@ -89,6 +89,8 @@ RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m)
 
 The tarball still exists but is now built for CPython 3.11 (its `.so` files are `cpython-311`, and it ships a `.ptoas-python-version = 3.11` marker) — do not use it, and do not pin its SHA anywhere: only the wheel SHA is tracked in `versions.env`.
 
+**Never prepend the venv to `PATH`.** Its `bin/` also contains the venv's own `python3`/`pip` (CPython 3.10), which shadow the system Python 3.12 that pypto, `scikit-build-core`, `nanobind`, and `pytest` live in — a bare `pip install --no-build-isolation` then fails with `No module named 'scikit_build_core'`, and any tool that shells out to `python3` silently gets an interpreter without pypto. The images **append** `${PTOAS_DIR}/bin` instead; pypto resolves `ptoas` through `PTOAS_ROOT` (`python/pypto/backend/_ptoas_locate.py`), so PATH order is irrelevant to codegen.
+
 The wheel's C++ extensions require **`GLIBCXX_3.4.29`** (`strings ptoas/_core*.so | grep GLIBCXX`). pypto's own CI works around this with conda's libstdc++ because its self-hosted runners sit on older device hosts, but Ubuntu 22.04's stock `libstdc++6` (GCC 11.4) already provides `GLIBCXX_3.4.30`, so **no conda workaround is needed** in the CANN images. The trailing `ptoas --version` probe is kept deliberately: it makes the image fail at build time (not at first `pytest`) if the wheel's ABI/glibc/libstdc++ contract is ever broken.
 
 ### `Dockerfile.simpler.cann9.0` — simpler + pto-isa only
@@ -420,6 +422,7 @@ Error message contains...
 ├─ "COPY ... path not found"        → Using COPY in stdin build → use git clone
 ├─ "fatal error: 'tensor.h'"        → Wrong SIMPLER_ROOT
 ├─ "PTOAS SHA256 mismatch"          → CI bumped version → update ARGs
+├─ "No module named 'scikit_build_core'" on `pip install -e` → bare pip is the ptoas venv pip (cp310) → use `python3.12 -m pip`
 ├─ "custom op ... unknown"          → PTOAS too old → update PTOAS_VERSION
 ├─ "cannot import name ..." from site-packages after checkout → non-editable copy shadows -e → issue_pytorch_hccl_tests
 ├─ "Unsupported data type at::kDouble" → fp64 reduce on HCCL → use float32 → issue_pytorch_hccl_tests
@@ -440,6 +443,7 @@ Error message contains...
 | `COPY` fails: "path not found" | Stdin build has no build context | Use `git clone` instead of `COPY` |
 | `fatal error: 'tensor.h'` | Wrong `SIMPLER_ROOT` | Set to simpler source tree (`/opt/pypto/runtime`) |
 | `ImportError: cannot import name 'X'` from `site-packages/...` after `git checkout` | Non-editable `pip install .` copy shadows `pip install -e .` | `pip uninstall -y <pkg> && pip install -e .`; verify `python -c "import <pkg> as p; print(p.__file__)"` is under the repo, not site-packages → `issue_pytorch_hccl_tests.md` |
+| `ModuleNotFoundError: No module named 'scikit_build_core'` on `pip install --no-build-isolation -e .` in the NPU image | Bare `pip`/`python3` resolve to the **PTOAS venv** (cp310, wheel only), not the system Python that holds pypto's build toolchain | Use `python3.12 -m pip install --no-build-isolation -e .`, or de-shadow the shell: `export PATH=$(echo "$PATH" \| tr ':' '\n' \| grep -v '^/opt/ptoas-bin' \| paste -sd: -)`. Current images append `${PTOAS_DIR}/bin` instead of prepending it |
 | `WORLD_SIZE=N make ...` runs wrong rank count | Makefile `export VAR = n` shadows env prefix | Pass as make arg (`make t VAR=n`) or `make -e`; fix Makefile to `VAR ?= n` → `issue_pytorch_hccl_tests.md` |
 | `HCCL reduce: Unsupported data type at::kDouble` (ERR02007) | fp64 `dist.reduce` unsupported on HCCL (works on gloo) | Reduce in `float32`; use only HCCL dtypes (int32/fp16/fp32/bf16) → `issue_pytorch_hccl_tests.md` |
 
