@@ -65,7 +65,7 @@ Each Dockerfile pins specific external versions. When asked to update one, run t
 | 1 | pypto `origin/main` ahead of `PYPTO_COMMIT`? | `git -C /path/to/pypto rev-list --count ${PYPTO_COMMIT}..origin/main` | `ARG PYPTO_COMMIT` + header comment example |
 | 2 | pto-isa commit changed? | Read `pypto/runtime/pto_isa.pin` — the single source of truth (auto-derived at Docker build time). | Auto-derived; no ARG update needed unless you want to hard-pin via `--build-arg` |
 | 3 | PTOAS version or SHA256 changed? | Read `pypto/toolchain/versions.env` **at the commit you are pinning** — this is the **single source of truth** for PTOAS_VERSION and PTOAS_SHA256_{AARCH64,X86_64} (bumped via PRs like [#1921](https://github.com/hw-native-sys/pypto/pull/1921)). Do NOT grep `.github/workflows/ci.yml` for PTOAS. | `ARG PTOAS_VERSION` + `ARG PTOAS_SHA256` (aarch64 for cann/server, x86_64 for sim) |
-| 4 | pip deps changed in pypto CI Dockerfile? | `diff <(grep 'pip install' pypto/.github/docker/github_ci.Dockerfile) <(grep 'pip install' Dockerfile.hw-native-sys.cann9.0)` | Update pip install RUN lines |
+| 4 | build inputs / torch pin changed in pypto CI? | Build inputs are **pinned exact** to `pypto/build-constraints.txt` (CI's validated set — added after nanobind 3.0.0 broke every branch, #2492/#2495); torch is pinned to `setup-ci-job`'s `TORCH_PIN` (unpinned 2.13 breaks the bf16 codegen golden compare). `scripts/dockerfile-sync-check.sh` verifies all five. Remaining deps: `diff <(grep 'pip install' pypto/.github/docker/github_ci.Dockerfile) <(grep 'pip install' Dockerfile.hw-native-sys.cann9.0)` | Update the pinned versions — never relax them back to `>=` |
 | 5 | Test commands in header comment match pypto CI? | Compare `.github/workflows/ci.yml` jobs with Dockerfile comment header | Update test command cheatsheet in header comment |
 | 6 | `3rdparty` fallback clones match `pypto/.gitmodules`? | `git -C /path/to/pypto show origin/main:.gitmodules` vs the fallback `git clone` URLs/branches in the Dockerfile | Update the fallback URL/branch — see "Third-party fallback" pattern |
 
@@ -101,6 +101,7 @@ The wheel's C++ extensions require **`GLIBCXX_3.4.29`** (`strings ptoas/_core*.s
 | 2 | pto-isa commit changed? | Read `simpler/pto_isa.pin` — the single source of truth (auto-derived at Docker build time). | Auto-derived; no ARG update needed unless you want to hard-pin via `--build-arg` |
 | 3 | `ENV LD_PRELOAD` absent? | `grep LD_PRELOAD Dockerfile.simpler.cann9.0` — should be comments only | Remove image-wide `ENV LD_PRELOAD` |
 | 4 | `set_env.sh` stripped, not re-added to bashrc? | `grep set_env Dockerfile.simpler.cann9.0` — strip `RUN` only, no bashrc append | Align with hw-native-sys pattern |
+| 5 | Build-input floor changed in simpler's pyproject? | `grep -oP '"nanobind\K[^"]+' simpler/pyproject.toml` vs the `nanobind` line (also checked by `scripts/dockerfile-sync-check.sh`) | Mirror the cap — currently `nanobind>=2.0.0,<3`: 3.x requires Python >= 3.10 in its cmake, simpler supports >= 3.9 |
 
 Note: No PTOAS or pypto dependencies — simpler-only image.
 
@@ -182,9 +183,11 @@ Note: pypto + simpler are mounted from host at runtime, not pinned in the Docker
 **Canonical: run the script.** `scripts/dockerfile-sync-check.sh` clones the four
 upstream repos **fresh** into a temp dir (never trusts local refs — a stale local
 checkout is exactly how pins silently drift), then compares every commit pin,
-PTOAS version/SHA, and pto-isa pin in all Dockerfiles against that fresh truth.
-It prints an `OK`/`DRIFT` line per pin and exits non-zero on any drift, so any
-agent (Claude / DeepSeek / Gemini / human) can gate on it:
+PTOAS version/SHA, pto-isa pin, the pinned build inputs (`pypto/build-constraints.txt`),
+torch (`setup-ci-job`'s `TORCH_PIN`), and simpler's `nanobind` floor in all
+Dockerfiles against that fresh truth. It prints an `OK`/`DRIFT` line per pin and
+exits non-zero on any drift, so any agent (Claude / DeepSeek / Gemini / human)
+can gate on it:
 
 ```bash
 ./scripts/dockerfile-sync-check.sh          # exit 0 = all current, 1 = drift

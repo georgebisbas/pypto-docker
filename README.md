@@ -139,7 +139,7 @@ Build pypto-lib simulation image (pinned pypto-lib commit):
 
 ```bash
 docker build \
-  --build-arg PYPTO_LIB_COMMIT=6dd5432006df3a6cec1b8c7624d5bc8cdc6e7f07 \
+  --build-arg PYPTO_LIB_COMMIT=aff70c1e384ca6551187de1d1076d88fa5952f6a \
   -t pypto-lib-hw-native-sys:sim \
   -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```

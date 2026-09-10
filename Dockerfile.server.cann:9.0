@@ -153,13 +153,14 @@ RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m)
     /opt/ptoas-bin/bin/ptoas --version && \
     rm -f "/tmp/${PTOAS_WHEEL}"
 
-# Install Python toolchain first (stable layer).
+# Install Python toolchain first (stable layer). Build inputs pinned to pypto's
+# build-constraints.txt (the set CI validates).
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
     pip install \
-      "scikit-build-core>=0.10.0" \
-      "nanobind>=2.0.0" \
-      "ninja>=1.11.0" \
-      "cmake>=3.15"
+      "scikit-build-core==1.0.3" \
+      "nanobind==2.15.0" \
+      "ninja==1.13.0" \
+      "cmake==4.4.2"
 
 # Mirror CI image dependencies used across pre-commit/lint/unit/fuzz workflows.
 RUN pip install \
@@ -170,7 +171,7 @@ RUN pip install \
 
 # Match fuzz simulation environment from CI container image.
 RUN pip install \
-      torch --index-url https://download.pytorch.org/whl/cpu
+      "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 COPY pypto /workspace/hw-native-sys/pypto
 

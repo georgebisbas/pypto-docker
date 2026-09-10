@@ -83,9 +83,10 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python
 ENV CC=gcc-15 \
     CXX=g++-15
 
+# nanobind capped below 3, mirroring simpler's pyproject [build-system] / CI.
 RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
-      "scikit-build-core>=0.10.0" "nanobind>=2.0.0" \
+      "scikit-build-core>=0.10.0" "nanobind>=2.0.0,<3" \
       "ninja>=1.11.0" "cmake>=3.15" && \
     pip install --no-cache-dir \
       "numpy>=2.0" \

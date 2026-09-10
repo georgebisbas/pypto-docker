@@ -116,17 +116,18 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python
 ENV CC=gcc-15 \
     CXX=g++-15
 
+# Build inputs pinned to pypto's build-constraints.txt; torch to CI's TORCH_PIN.
 RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
-      "scikit-build-core>=0.10.0" "nanobind>=2.0.0" \
-      "ninja>=1.11.0" "cmake>=3.15" && \
+      "scikit-build-core==1.0.3" "nanobind==2.15.0" \
+      "ninja==1.13.0" "cmake==4.4.2" && \
     pip install --no-cache-dir \
       "numpy>=2.0" \
       "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
       "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
       "pre-commit==4.5.1" && \
     pip install --no-cache-dir \
-      torch --index-url https://download.pytorch.org/whl/cpu
+      "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
 ARG PYPTO_COMMIT=e048068d25111148a7535207422adb61047002a2

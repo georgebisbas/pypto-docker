@@ -135,13 +135,15 @@ RUN apt-get update && \
 ENV CC=gcc-15 \
     CXX=g++-15
 
-# Python build toolchain + test deps (stable layer — changes only with ci.yml/github_ci.Dockerfile).
+# Python build toolchain + test deps. Build inputs are pinned to pypto's
+# build-constraints.txt — the set CI validates — so a rebuild cannot drift into
+# an untested nanobind/cmake release (#2492, #2495).
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
     pip install \
-      "scikit-build-core>=0.10.0" \
-      "nanobind>=2.0.0" \
-      "ninja>=1.11.0" \
-      "cmake>=3.15"
+      "scikit-build-core==1.0.3" \
+      "nanobind==2.15.0" \
+      "ninja==1.13.0" \
+      "cmake==4.4.2"
 
 RUN pip install \
       "numpy>=2.0" \
@@ -149,8 +151,9 @@ RUN pip install \
       "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
       "pre-commit==4.5.1"
 
-# Install torch (pin matches pypto/.github/docker/github_ci.Dockerfile)
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+# torch pinned to CI's TORCH_PIN: unpinned resolves to 2.13, whose bf16 codegen
+# golden comparison fails (see setup-ci-job/action.yml).
+RUN pip install "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;

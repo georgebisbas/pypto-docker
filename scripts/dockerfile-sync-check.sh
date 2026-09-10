@@ -200,6 +200,66 @@ check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.simpler.sim.ubuntu22.04" "$PTO_I
 # build time (PTO_ISA_COMMIT= empty), so no pin check needed there.
 
 # ---------------------------------------------------------------------------
+# Build-input + torch pins (pypto-based images).
+#
+# pypto pins its build inputs in build-constraints.txt (CI-validated; added
+# after nanobind 3.0.0 broke every branch at once — #2492/#2495), and torch in
+# setup-ci-job's TORCH_PIN (unpinned resolves to 2.13, whose bf16 codegen golden
+# compare fails). Mirroring both keeps these images on the exact set CI tests.
+# ---------------------------------------------------------------------------
+CONSTRAINTS_UP="$TMPDIR_CHECK/pypto/build-constraints.txt"
+PY_IMAGES=(Dockerfile.hw-native-sys.cann9.0 Dockerfile.hw-native-sys.sim.ubuntu22.04 "Dockerfile.server.cann:9.0")
+if [[ -f "$CONSTRAINTS_UP" ]]; then
+  for pkg in cmake nanobind ninja scikit-build-core; do
+    want="$(grep -oP "^${pkg}==\K[0-9A-Za-z.]+" "$CONSTRAINTS_UP" | head -1 || true)"
+    if [[ -z "$want" ]]; then
+      warn "  SKIP build input $pkg — not pinned in pypto build-constraints.txt"
+      continue
+    fi
+    for f in "${PY_IMAGES[@]}"; do
+      if grep -qF "\"${pkg}==${want}\"" "$REPO_ROOT/$f"; then
+        ok "  OK   $pkg==$want in $f"
+      else
+        err "  DRIFT $pkg in $f: expected \"${pkg}==${want}\" (pypto build-constraints.txt)"
+        DRIFT=1
+      fi
+    done
+  done
+else
+  warn "  SKIP build-input pins — pypto/build-constraints.txt not found"
+fi
+
+TORCH_PIN_UP="$(grep -oP "TORCH_PIN='\K[^']+" "$TMPDIR_CHECK/pypto/.github/actions/setup-ci-job/action.yml" 2>/dev/null | head -1 || true)"
+if [[ -n "$TORCH_PIN_UP" ]]; then
+  for f in "${PY_IMAGES[@]}"; do
+    if grep -qF "\"${TORCH_PIN_UP}\"" "$REPO_ROOT/$f"; then
+      ok "  OK   $TORCH_PIN_UP in $f"
+    else
+      err "  DRIFT torch in $f: expected \"${TORCH_PIN_UP}\" (pypto setup-ci-job TORCH_PIN)"
+      DRIFT=1
+    fi
+  done
+else
+  warn "  SKIP torch pin — TORCH_PIN not found in pypto setup-ci-job"
+fi
+
+# simpler pins its own floor, not pypto's set: nanobind is capped below 3 in
+# pyproject (3.x needs Python >= 3.10 in nanobind-config.cmake; simpler >= 3.9).
+SIMPLER_NB_UP="$(grep -oP '"nanobind\K[^"]+' "$TMPDIR_CHECK/simpler/pyproject.toml" 2>/dev/null | head -1 || true)"
+if [[ -n "$SIMPLER_NB_UP" ]]; then
+  for f in Dockerfile.simpler.cann9.0 Dockerfile.simpler.sim.ubuntu22.04; do
+    if grep -qF "\"nanobind${SIMPLER_NB_UP}\"" "$REPO_ROOT/$f"; then
+      ok "  OK   nanobind${SIMPLER_NB_UP} in $f"
+    else
+      err "  DRIFT nanobind in $f: expected \"nanobind${SIMPLER_NB_UP}\" (simpler pyproject.toml)"
+      DRIFT=1
+    fi
+  done
+else
+  warn "  SKIP simpler nanobind cap — not found in simpler/pyproject.toml"
+fi
+
+# ---------------------------------------------------------------------------
 # README example freshness.
 #
 # The build examples in README.md quote concrete commit SHAs. Nothing else here

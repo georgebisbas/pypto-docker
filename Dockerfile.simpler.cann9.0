@@ -115,11 +115,13 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
-# Python build toolchain.
+# Python build toolchain. nanobind is capped below 3, mirroring simpler's
+# pyproject [build-system] and CI: nanobind 3.x requires Python >= 3.10 in its
+# nanobind-config.cmake while simpler supports >= 3.9.
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
     pip install \
       "scikit-build-core>=0.10.0" \
-      "nanobind>=2.0.0" \
+      "nanobind>=2.0.0,<3" \
       "ninja>=1.11.0" \
       "cmake>=3.15"
 
