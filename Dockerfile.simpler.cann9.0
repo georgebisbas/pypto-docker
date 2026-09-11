@@ -7,7 +7,7 @@
 # All paths are driven by build args:
 #   CANN_VERSION    (default: 9.0.0)  — selects base image tag and all cann-* paths
 #   INSTALL_PREFIX  (default: /opt)   — root for simpler and pto-isa installs
-#   SIMPLER_COMMIT  (default: a1aa7fddf42b2d28849bc3fb6fe1eb50ab891324) — simpler commit to build from; changing it busts cache
+#   SIMPLER_COMMIT  (default: c540572d8db96bb25e47c756d0bd63f40adcc867) — simpler commit to build from; changing it busts cache
 #   PTO_ISA_COMMIT  (default: 5a4f74cbf627d4aac2e0ce10d5e0d8b118343265) — pto-isa commit from simpler's pto_isa.pin at main
 #
 # REQUIREMENTS:
@@ -24,7 +24,7 @@
 #   docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # BUILD (pinned simpler + pinned pto-isa):
-#   docker build --build-arg SIMPLER_COMMIT=a1aa7fddf42b2d28849bc3fb6fe1eb50ab891324 --build-arg PTO_ISA_COMMIT=5a4f74cbf627d4aac2e0ce10d5e0d8b118343265 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
+#   docker build --build-arg SIMPLER_COMMIT=c540572d8db96bb25e47c756d0bd63f40adcc867 --build-arg PTO_ISA_COMMIT=5a4f74cbf627d4aac2e0ce10d5e0d8b118343265 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # RUN (single-device):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
@@ -88,7 +88,7 @@ RUN apt-get update && \
 ENV CC=gcc-15 \
     CXX=g++-15
 
-ARG SIMPLER_COMMIT=a1aa7fddf42b2d28849bc3fb6fe1eb50ab891324
+ARG SIMPLER_COMMIT=c540572d8db96bb25e47c756d0bd63f40adcc867
 
 # Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
