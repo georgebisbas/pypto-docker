@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Fast-forward local main from origin/main for sibling repos without checkout/switch.
+# Fast-forward local main from origin/<default-branch> for sibling repos without checkout/switch.
 #
 # Usage (from anywhere):
 #   ./scripts/fetch-pull-mains.sh
 #   bash /path/to/pypto-docker/scripts/fetch-pull-mains.sh
 #
 # Repos: pypto, pto-isa, PTOAS, pypto-lib (siblings of pypto-docker).
+# PTOAS's upstream default branch is `master`, not `main` (renamed at some
+# point after this script's local `main` clone was created) -- REPO_BRANCH
+# below is the per-repo override for that.
 
 set -euo pipefail
 
@@ -13,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 REPOS=(pypto pto-isa PTOAS pypto-lib)
+declare -A REPO_BRANCH=([PTOAS]=master)
 FAILED=0
 
 if [[ -t 1 ]]; then
@@ -40,6 +44,7 @@ short_sha() {
 update_repo() {
   local name="$1"
   local repo="${WORKSPACE_ROOT}/${name}"
+  local remote_branch="${REPO_BRANCH[${name}]:-main}"
 
   header "${name}"
 
@@ -62,26 +67,39 @@ update_repo() {
 
   echo "current branch: ${C_CYAN}${current:-DETACHED}${C_RESET}"
   echo "local main before: ${C_CYAN}${before}${C_RESET}"
+  if [[ "${remote_branch}" != "main" ]]; then
+    echo "upstream default branch: ${C_CYAN}${remote_branch}${C_RESET} (overridden; local branch stays 'main')"
+  fi
 
-  # Probe origin/main exists (fetch first so the ref is available).
-  if ! git -C "${repo}" fetch origin main; then
-    err "failed to fetch origin main"
+  # Probe origin/<remote_branch> exists (fetch first so the ref is available).
+  if ! git -C "${repo}" fetch origin "${remote_branch}"; then
+    err "failed to fetch origin ${remote_branch}"
     return 1
   fi
-  if ! git -C "${repo}" show-ref --verify --quiet refs/remotes/origin/main; then
-    err "origin/main does not exist"
+  if ! git -C "${repo}" show-ref --verify --quiet "refs/remotes/origin/${remote_branch}"; then
+    err "origin/${remote_branch} does not exist"
+    return 1
+  fi
+
+  # Diverged (not a fast-forward) needs a human decision -- report and move on
+  # rather than mask it as a generic ff-only failure.
+  if ! git -C "${repo}" merge-base --is-ancestor main "origin/${remote_branch}"; then
+    local ahead behind
+    ahead="$(git -C "${repo}" rev-list --count "main..origin/${remote_branch}")"
+    behind="$(git -C "${repo}" rev-list --count "origin/${remote_branch}..main")"
+    err "local main has diverged from origin/${remote_branch} (${ahead} commits behind, ${behind} commits ahead) -- needs manual reconciliation, not auto-fast-forwarded"
     return 1
   fi
 
   if [[ "${current}" == "main" ]]; then
-    if ! git -C "${repo}" merge --ff-only origin/main; then
-      err "fast-forward merge of origin/main into main failed"
+    if ! git -C "${repo}" merge --ff-only "origin/${remote_branch}"; then
+      err "fast-forward merge of origin/${remote_branch} into main failed"
       return 1
     fi
   else
     # Update local main without checking it out (refuses non-FF).
-    if ! git -C "${repo}" fetch origin main:main; then
-      err "failed to fast-forward local main from origin/main"
+    if ! git -C "${repo}" fetch origin "${remote_branch}:main"; then
+      err "failed to fast-forward local main from origin/${remote_branch}"
       return 1
     fi
   fi
