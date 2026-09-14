@@ -130,7 +130,7 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
       "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
-ARG PYPTO_COMMIT=706285c602d42accd627fe75385c935251af789f
+ARG PYPTO_COMMIT=58732a939a245ac97c1e8b36faf8144850f898c7
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
