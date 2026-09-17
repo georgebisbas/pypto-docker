@@ -57,7 +57,7 @@ Build standalone hw-native-sys image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg PYPTO_COMMIT=fb107da927f40a65e0e3ca7198e47f40d9e075d5 \
+  --build-arg PYPTO_COMMIT=d82fbf20a7c6b1a429d1dde54b63440492cb4a27 \
   --build-arg PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f \
   -t pypto3-hw-native-sys:cann9 \
   - < Dockerfile.hw-native-sys.cann9.0
@@ -79,7 +79,7 @@ Build standalone simpler image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=4860af980ca3688612435292e0a2b256324d3751 \
+  --build-arg SIMPLER_COMMIT=31f348eb33bb0b3b9d4a789a744603eb96ab8c78 \
   --build-arg PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f \
   -t simpler-cann9 \
   - < Dockerfile.simpler.cann9.0
@@ -109,7 +109,7 @@ docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu2
 Build standalone local simulation image (pinned commits):
 
 ```bash
-docker build --build-arg PYPTO_COMMIT=fb107da927f40a65e0e3ca7198e47f40d9e075d5 --build-arg PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+docker build --build-arg PYPTO_COMMIT=d82fbf20a7c6b1a429d1dde54b63440492cb4a27 --build-arg PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 ```
 
 Build standalone simpler simulation image (no NPU, no pypto):
@@ -122,7 +122,7 @@ Build standalone simpler simulation image (pinned commits):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=4860af980ca3688612435292e0a2b256324d3751 \
+  --build-arg SIMPLER_COMMIT=31f348eb33bb0b3b9d4a789a744603eb96ab8c78 \
   --build-arg PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f \
   -t simpler-hw-native-sys:sim \
   -f Dockerfile.simpler.sim.ubuntu22.04 .
@@ -139,7 +139,7 @@ Build pypto-lib simulation image (pinned pypto-lib commit):
 
 ```bash
 docker build \
-  --build-arg PYPTO_LIB_COMMIT=232eb66ed308819f06532d3c4803b9d1e4d98a06 \
+  --build-arg PYPTO_LIB_COMMIT=6affa7283a89e83ce9556b6e75449bf56a49944f \
   -t pypto-lib-hw-native-sys:sim \
   -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```

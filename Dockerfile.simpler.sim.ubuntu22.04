@@ -13,7 +13,7 @@
 #
 # BUILD (pinned commits):
 #   docker build \
-#     --build-arg SIMPLER_COMMIT=4860af980ca3688612435292e0a2b256324d3751 \
+#     --build-arg SIMPLER_COMMIT=31f348eb33bb0b3b9d4a789a744603eb96ab8c78 \
 #     --build-arg PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f \
 #     -t simpler-hw-native-sys:sim \
 #     -f Dockerfile.simpler.sim.ubuntu22.04 .
@@ -94,7 +94,7 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
       torch --index-url https://download.pytorch.org/whl/cpu
 
-ARG SIMPLER_COMMIT=4860af980ca3688612435292e0a2b256324d3751
+ARG SIMPLER_COMMIT=31f348eb33bb0b3b9d4a789a744603eb96ab8c78
 
 # Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
