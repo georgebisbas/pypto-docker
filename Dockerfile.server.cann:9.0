@@ -129,7 +129,7 @@ WORKDIR /workspace/hw-native-sys/pypto
 # Install PTO-ISA (required by system tests that call code_runner).
 # Pinned to the commit from the runtime submodule's runtime/pto_isa.pin
 # (the single source of truth per pypto CI toolchain job; see PR #1851).
-ARG PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f
+ARG PTO_ISA_COMMIT=83d01313d9bfc247c4b7b8cbfd9691019f0d106f
 RUN timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git /opt/pto-isa \
       || { rm -rf /opt/pto-isa; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git /opt/pto-isa; } && \
   git -C /opt/pto-isa checkout "${PTO_ISA_COMMIT}" && \

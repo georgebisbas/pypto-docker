@@ -37,7 +37,7 @@
 # COMMANDS INSIDE CONTAINER — mirrors pypto .github/workflows/ci.yml job order.
 #   INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0. CANN env is sourced from bash.bashrc.
 #   Device lists are inlined below (change 0,1,2,3 / 0 to match your host).
-#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently 3b4faf67aebb3e0d41be7952c56908b3adba7a8f)
+#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently 83d01313d9bfc247c4b7b8cbfd9691019f0d106f)
 #   unless PTO_ISA_COMMIT was overridden at build.
 #
 #   cd /opt/pypto
