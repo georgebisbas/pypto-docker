@@ -16,6 +16,9 @@
 
 set -euo pipefail
 
+# BuildKit is required for the Dockerfiles' --mount=type=cache pip/apt caches.
+export DOCKER_BUILDKIT=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TARGET="${1:-all}"

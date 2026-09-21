@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Standalone pytorch-hccl-tests image for Ascend 910B
 #
 # Minimal benchmark image: clones only the pytorch-hccl-tests fork and installs
@@ -77,22 +78,21 @@ ARG PT_HCCL_COMMIT=53a6734b085d9559fc069351747be2ca8663d6ff
 LABEL org.opencontainers.image.revision="${PT_HCCL_COMMIT}" \
       org.opencontainers.image.source="${PT_HCCL_REPO_URL}"
 
-# PIP_NO_CACHE_DIR=1 disables the wheel cache for ALL pip invocations, including
-# the ones inside `make ${PT_HCCL_INSTALL_TARGET}` — keeps the venv layer lean.
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONUNBUFFERED=1
 
 # torch-npu 2.9.0 ships cp310 wheels only -> we run a Python 3.10 venv even
 # though the base image carries py3.12. Do NOT drop python3.10 without first
 # confirming a matching torch-npu wheel exists for the newer interpreter.
-RUN apt-get update && \
+# apt cache/lists are BuildKit cache mounts, not image layers — no rm -rf needed.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
       git ca-certificates curl make gcc g++ python3.10 python3.10-venv \
       ripgrep nano \
-      bash-completion gh && \
-    rm -rf /var/lib/apt/lists/*
+      bash-completion gh
 
 # Full clone (with .git) so the checkout is a usable, fully-offline git repo
 # inside the container: git status/log/diff over complete history, and a real
@@ -123,7 +123,8 @@ WORKDIR ${PT_HCCL_DIR}
 
 ARG PT_HCCL_INSTALL_TARGET=install-npu-arm
 
-RUN python3.10 -m venv "${PT_HCCL_VENV}" && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3.10 -m venv "${PT_HCCL_VENV}" && \
     . "${PT_HCCL_VENV}/bin/activate" && \
     python -m pip install --upgrade pip && \
     pip install pytest && \

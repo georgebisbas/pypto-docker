@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # PyPTO server/dev image (official CANN base, more isolated user-space stack)
 #
 # EXPECTED REPO LAYOUT (build context = hw-native-sys/):
@@ -93,10 +94,12 @@ FROM quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_CACHE_DIR=/tmp/pip-cache
+    PYTHONUNBUFFERED=1
 
-RUN apt-get update && \
+# apt cache/lists are BuildKit cache mounts, not image layers — no rm -rf needed.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
       git curl ca-certificates \
       python3.10 python3.10-venv \
@@ -110,8 +113,7 @@ RUN apt-get update && \
     fi && \
     if ! command -v gcc-15 >/dev/null 2>&1; then \
       ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
-    fi && \
-    rm -rf /var/lib/apt/lists/*
+    fi
 
 ENV CC=gcc-15 \
     CXX=g++-15
@@ -155,7 +157,8 @@ RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m)
 
 # Install Python toolchain first (stable layer). Build inputs pinned to pypto's
 # build-constraints.txt (the set CI validates).
-RUN python3 -m pip install --upgrade pip setuptools wheel && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip setuptools wheel && \
     pip install \
       "scikit-build-core==1.0.3" \
       "nanobind==2.15.0" \
@@ -163,14 +166,16 @@ RUN python3 -m pip install --upgrade pip setuptools wheel && \
       "cmake==4.4.2"
 
 # Mirror CI image dependencies used across pre-commit/lint/unit/fuzz workflows.
-RUN pip install \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
       "numpy>=2.0" \
       "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
       "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
       "pre-commit==4.5.1"
 
 # Match fuzz simulation environment from CI container image.
-RUN pip install \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
       "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 COPY pypto /workspace/hw-native-sys/pypto
@@ -196,10 +201,12 @@ RUN if [ ! -f 3rdparty/libbacktrace/configure.ac ]; then \
 
 # Build simpler C++ extension from the required runtime submodule.
 # Remove any stale build/ directory carried in by COPY (matches daily_ci.yml).
-RUN rm -rf /workspace/hw-native-sys/pypto/runtime/build && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    rm -rf /workspace/hw-native-sys/pypto/runtime/build && \
     pip install --no-build-isolation /workspace/hw-native-sys/pypto/runtime
 
-RUN pip install --no-build-isolation -v ".[dev]"
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-build-isolation -v ".[dev]"
 
 # Remove set_env.sh auto-sourcing from ALL system/user startup files.
 # The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.
@@ -213,6 +220,11 @@ RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.b
 
 # Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
 RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
+
+# HCCL preload helper — a function, not an exported var, so it is a no-op
+# until explicitly called (safe under VS Code's userEnvProbe). See the
+# LD_PRELOAD comment further below for why it isn't exported image-wide.
+RUN echo 'hccl-preload() { export LD_PRELOAD="/usr/local/Ascend/cann-9.0.0/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
 
 # Preload libhccl.so so host_runtime.so's WEAK HCCL symbols resolve at load time.
 # Without this, HcclGetRootInfo et al. → NULL → SIGSEGV on comm_init.

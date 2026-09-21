@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Personal dev layer on top of simpler-cann9.
 #
 # Bakes personal git identity + an editable install so a `docker run` drops
@@ -40,8 +41,8 @@
 ARG BASE_IMAGE=simpler-cann9
 FROM ${BASE_IMAGE}
 
-ARG GIT_USER_NAME="georgebisbas"
-ARG GIT_USER_EMAIL="georgios.bismpas@h-partners.com"
+ARG GIT_USER_NAME="Your Name"
+ARG GIT_USER_EMAIL="you@example.com"
 ARG FORK_REMOTE_NAME=
 ARG FORK_REMOTE_URL=
 
@@ -62,11 +63,10 @@ RUN if [ -n "${FORK_REMOTE_URL}" ]; then \
 # editable so source edits made inside the container take effect without a
 # full reinstall. Uses the '[test]' extra (matches simpler CI/sim images —
 # no '[dev]' extra is known to exist for simpler).
-RUN cd "${SIMPLER_DIR}" && pip install --no-build-isolation -e ".[test]"
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd "${SIMPLER_DIR}" && pip install --no-build-isolation -e ".[test]"
 
-# HCCL preload helper — a function, not an exported var, so it is a no-op
-# until explicitly called (safe under VS Code's userEnvProbe).
-RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
+# hccl-preload shell function is inherited from the base image.
 
 WORKDIR ${SIMPLER_DIR}
 CMD ["bash"]

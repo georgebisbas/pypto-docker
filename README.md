@@ -13,8 +13,10 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 
 - [README.md](README.md): Repository index and quick usage.
 - [Dockerfile.hw-native-sys.cann9.0](Dockerfile.hw-native-sys.cann9.0): Standalone PyPTO image that clones all sources from GitHub at build time.
+- [Dockerfile.hw-native-sys.dev.cann9.0](Dockerfile.hw-native-sys.dev.cann9.0): Personal dev layer on top of `pypto3-hw-native-sys:cann9` — your git identity + editable install. See "Personal Dev Setup" below.
 - [Dockerfile.server.cann:9.0](Dockerfile.server.cann:9.0): Server/dev image that uses a local pypto build context.
 - [Dockerfile.simpler.cann9.0](Dockerfile.simpler.cann9.0): Standalone simpler image with pinned commit support and HCCL-safe runtime defaults.
+- [Dockerfile.simpler.dev.cann9.0](Dockerfile.simpler.dev.cann9.0): Personal dev layer on top of `simpler-cann9` — your git identity + editable install. See "Personal Dev Setup" below.
 - [Dockerfile.pytorch-hccl-tests.cann9.0](Dockerfile.pytorch-hccl-tests.cann9.0): Standalone HCCL micro-benchmark image (`torchrun` + pytorch-hccl-tests fork).
 - [Dockerfile.hw-native-sys.sim.ubuntu22.04](Dockerfile.hw-native-sys.sim.ubuntu22.04): Standalone local simulation image for PyPTO (`a2a3sim`/`a5sim`) on x86_64 without NPU devices.
 - [Dockerfile.simpler.sim.ubuntu22.04](Dockerfile.simpler.sim.ubuntu22.04): Standalone simpler-only simulation image (`a2a3sim`/`a5sim`) for L3 worker STs without pypto or CANN.
@@ -44,6 +46,14 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - Build works from any directory using stdin input.
 - Repositories (`pypto`, `pto-isa`) are cloned during build.
 - Key behavior is controlled via build args (`CANN_VERSION`, `INSTALL_PREFIX`, `PYPTO_COMMIT`, `PTO_ISA_COMMIT`).
+
+## Build Requirements
+
+All Dockerfiles use BuildKit `--mount=type=cache` for pip/apt so that a
+pinned-commit bump (`PYPTO_COMMIT`, `SIMPLER_COMMIT`, ...) doesn't force a
+full re-download of unchanged dependencies. Docker 23+ enables BuildKit by
+default for `docker build`; on older installs, `export DOCKER_BUILDKIT=1`
+first (the `scripts/build-*.sh` wrappers already do this).
 
 ## Build Commands
 
@@ -143,6 +153,42 @@ docker build \
   -t pypto-lib-hw-native-sys:sim \
   -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```
+
+## Personal Dev Setup (`.dev.` images)
+
+`Dockerfile.hw-native-sys.dev.cann9.0` and `Dockerfile.simpler.dev.cann9.0`
+layer your git identity, an optional fork remote, and an editable install on
+top of the base NPU images — `docker run` drops you straight into a
+ready-to-hack checkout. Their `ARG` defaults are generic placeholders (no
+identity baked in) so the repo stays safe for anyone to build; personalize
+them once and it's automatic from then on.
+
+One-time setup, so you never have to export anything by hand again:
+
+```bash
+cp scripts/dev-identity.env.example scripts/dev-identity.env
+# edit scripts/dev-identity.env with your name/email/fork(s) — this file is
+# gitignored and never committed
+```
+
+Then, after building the base images (see Build Commands above):
+
+```bash
+./scripts/build-npu-dev-images.sh          # both pypto3-dev:cann9 and simpler-dev:cann9
+./scripts/build-npu-dev-images.sh pypto    # just one — same for `simpler`
+```
+
+`scripts/dev-identity.env` is sourced automatically by
+`build-npu-dev-images.sh` if present. See `scripts/dev-identity.env.example`
+for the full variable list (`GIT_USER_NAME`, `GIT_USER_EMAIL`,
+`PYPTO_FORK_REMOTE_NAME`/`URL`, `SIMPLER_FORK_REMOTE_NAME`/`URL` — the pypto
+and simpler fork settings are independent, since they're usually different
+GitHub forks). A worked example of one maintainer's own values lives in
+`../pypto-tooling/personal_setup.md`.
+
+Run the resulting images with the same flags as the base cann9 images (see
+"Runtime Notes (Ascend 910B)" below) — just swap the tag for
+`pypto3-dev:cann9` / `simpler-dev:cann9`.
 
 Build pypto-lib NPU image (requires `pypto3-hw-native-sys:cann9` base):
 

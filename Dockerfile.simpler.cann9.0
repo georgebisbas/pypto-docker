@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Standalone simpler dev image for Ascend 910B
 #
 # No local files required — everything is cloned from GitHub at build time.
@@ -66,10 +67,12 @@ ENV SIMPLER_DIR=${INSTALL_PREFIX}/simpler \
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_CACHE_DIR=/tmp/pip-cache
+    PYTHONUNBUFFERED=1
 
-RUN apt-get update && \
+# apt cache/lists are BuildKit cache mounts, not image layers — no rm -rf needed.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
       git curl ca-certificates \
       ccache \
@@ -82,8 +85,7 @@ RUN apt-get update && \
     fi && \
     if ! command -v gcc-15 >/dev/null 2>&1; then \
       ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
-    fi && \
-    rm -rf /var/lib/apt/lists/*
+    fi
 
 ENV CC=gcc-15 \
     CXX=g++-15
@@ -118,7 +120,8 @@ ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 # Python build toolchain. nanobind is capped below 3, mirroring simpler's
 # pyproject [build-system] and CI: nanobind 3.x requires Python >= 3.10 in its
 # nanobind-config.cmake while simpler supports >= 3.9.
-RUN python3 -m pip install --upgrade pip setuptools wheel && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip setuptools wheel && \
     pip install \
       "scikit-build-core>=0.10.0" \
       "nanobind>=2.0.0,<3" \
@@ -126,14 +129,17 @@ RUN python3 -m pip install --upgrade pip setuptools wheel && \
       "cmake>=3.15"
 
 # Runtime / test dependencies.
-RUN pip install \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
       "numpy>=2.0" \
       "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0"
 
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 # Build and install simpler C++ extension.
-RUN rm -rf ./build && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    rm -rf ./build && \
     pip install --no-build-isolation .
 
 # Remove set_env.sh auto-sourcing from ALL system/user startup files.
@@ -148,6 +154,11 @@ RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.b
 
 # Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
 RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
+
+# HCCL preload helper — a function, not an exported var, so it is a no-op
+# until explicitly called (safe under VS Code's userEnvProbe). See the
+# LD_PRELOAD comment further below for why it isn't exported image-wide.
+RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
 
 ENV ASCEND_HOME_PATH=${CANN_HOME} \
     PTO_TILE_LIB_CODE_PATH=${CANN_HOME} \

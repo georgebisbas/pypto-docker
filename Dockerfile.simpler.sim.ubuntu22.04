@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Standalone simpler local simulation image (x86_64, no NPU required)
 #
 # Purpose:
@@ -53,11 +54,13 @@ ENV SIMPLER_DIR=${INSTALL_PREFIX}/simpler \
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_CACHE_DIR=/tmp/pip-cache
+    PYTHONUNBUFFERED=1
 
 # Simulator builds need modern GCC for _Float16 code paths.
-RUN apt-get update && \
+# apt cache/lists are BuildKit cache mounts, not image layers — no rm -rf needed.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
     apt-get install -y --no-install-recommends software-properties-common gnupg gpg-agent dirmngr && \
     add-apt-repository -y ppa:deadsnakes/ppa && \
     add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
@@ -68,8 +71,7 @@ RUN apt-get update && \
       git curl ca-certificates \
       ccache cmake ninja-build pkg-config \
       ripgrep nano \
-      bash-completion gh && \
-    rm -rf /var/lib/apt/lists/*
+      bash-completion gh
 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 1 && \
     update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 1 && \
@@ -84,14 +86,15 @@ ENV CC=gcc-15 \
     CXX=g++-15
 
 # nanobind capped below 3, mirroring simpler's pyproject [build-system] / CI.
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip setuptools wheel && \
+    pip install \
       "scikit-build-core>=0.10.0" "nanobind>=2.0.0,<3" \
       "ninja>=1.11.0" "cmake>=3.15" && \
-    pip install --no-cache-dir \
+    pip install \
       "numpy>=2.0" \
       "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" && \
-    pip install --no-cache-dir \
+    pip install \
       torch --index-url https://download.pytorch.org/whl/cpu
 
 ARG SIMPLER_COMMIT=88b32056abef719562b6ffb339d8e04085b6adc4
@@ -127,7 +130,8 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
 # Match simpler CI st-sim-a2a3: pip install '.[test]' (no SIMPLER_PTO_ISA_COMMIT cmake pin for sim).
-RUN rm -rf ./build && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    rm -rf ./build && \
     pip install --no-build-isolation '.[test]'
 
 # Helper script for L3 sim pytest (optional; copy from build context when present).

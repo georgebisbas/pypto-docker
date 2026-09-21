@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 # Build personal dev-layer images on top of the Ascend 910B (CANN) images,
-# baking in git identity / fork remote / editable installs from
-# ../pypto-tooling/personal_setup.md so `docker run` drops you into a
-# ready-to-hack checkout. Run on the NPU host, after the base images exist
-# (see build-npu-images.sh).
+# baking in your git identity / (optionally) a fork remote / editable installs
+# so `docker run` drops you into a ready-to-hack checkout. Dockerfile defaults
+# are generic (no identity baked in unless you set these) so the repo stays
+# safe for anyone to build. For a one-time, no-typing setup see "Personal Dev
+# Setup" in ../README.md and ../../pypto-tooling/personal_setup.md.
+# Run on the NPU host, after the base images exist (see build-npu-images.sh).
 #
 # Usage:
 #   ./scripts/build-npu-dev-images.sh [pypto|simpler|all]
 #
-# Env overrides (only applied if non-empty; otherwise Dockerfile defaults apply):
-#   GIT_USER_NAME      git identity baked into both images
-#   GIT_USER_EMAIL     git identity baked into both images
-#   FORK_REMOTE_NAME   fork remote name                    (pypto: default fork-gbisbas)
-#   FORK_REMOTE_URL    fork remote URL to add + fetch       (pypto: default set; simpler: none by default)
-#   PYPTO_BASE_IMAGE   base image tag for pypto, default pypto3-hw-native-sys:cann9
-#   SIMPLER_BASE_IMAGE base image tag for simpler, default simpler-cann9
+# Env overrides (only applied if non-empty; otherwise Dockerfile defaults
+# apply). Auto-loaded from scripts/dev-identity.env if that file exists (copy
+# scripts/dev-identity.env.example to create it — gitignored, one-time setup):
+#   GIT_USER_NAME          git identity baked into both images   (default: generic placeholder)
+#   GIT_USER_EMAIL         git identity baked into both images   (default: generic placeholder)
+#   PYPTO_FORK_REMOTE_NAME fork remote name for the pypto image  (default: none — no fork configured)
+#   PYPTO_FORK_REMOTE_URL  fork remote URL for the pypto image   (default: none — no fork configured)
+#   SIMPLER_FORK_REMOTE_NAME fork remote name for the simpler image (default: none — no fork configured)
+#   SIMPLER_FORK_REMOTE_URL  fork remote URL for the simpler image  (default: none — no fork configured)
+#   PYPTO_BASE_IMAGE       base image tag for pypto, default pypto3-hw-native-sys:cann9
+#   SIMPLER_BASE_IMAGE     base image tag for simpler, default simpler-cann9
 #
 # Images:
 #   pypto3-dev:cann9   <- Dockerfile.hw-native-sys.dev.cann9.0  (FROM ${PYPTO_BASE_IMAGE})
@@ -22,9 +28,20 @@
 
 set -euo pipefail
 
+# BuildKit is required for the Dockerfiles' --mount=type=cache pip/apt caches.
+export DOCKER_BUILDKIT=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLING_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TARGET="${1:-all}"
+
+# Personal, gitignored, one-time setup: create scripts/dev-identity.env (see
+# scripts/dev-identity.env.example) so GIT_USER_NAME/GIT_USER_EMAIL/fork
+# settings below are picked up automatically without exporting them by hand.
+if [[ -f "${SCRIPT_DIR}/dev-identity.env" ]]; then
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/dev-identity.env"
+fi
 
 if [[ -t 1 ]]; then
   C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_RED=$'\033[31m'
@@ -79,8 +96,8 @@ if [[ "${TARGET}" == "pypto" || "${TARGET}" == "all" ]]; then
   args=()
   [[ -n "${GIT_USER_NAME:-}" ]] && args+=(--build-arg "GIT_USER_NAME=${GIT_USER_NAME}")
   [[ -n "${GIT_USER_EMAIL:-}" ]] && args+=(--build-arg "GIT_USER_EMAIL=${GIT_USER_EMAIL}")
-  [[ -n "${FORK_REMOTE_NAME:-}" ]] && args+=(--build-arg "FORK_REMOTE_NAME=${FORK_REMOTE_NAME}")
-  [[ -n "${FORK_REMOTE_URL:-}" ]] && args+=(--build-arg "FORK_REMOTE_URL=${FORK_REMOTE_URL}")
+  [[ -n "${PYPTO_FORK_REMOTE_NAME:-}" ]] && args+=(--build-arg "FORK_REMOTE_NAME=${PYPTO_FORK_REMOTE_NAME}")
+  [[ -n "${PYPTO_FORK_REMOTE_URL:-}" ]] && args+=(--build-arg "FORK_REMOTE_URL=${PYPTO_FORK_REMOTE_URL}")
   build_image "pypto" "Dockerfile.hw-native-sys.dev.cann9.0" "pypto3-dev:cann9" "${PYPTO_BASE_IMAGE:-pypto3-hw-native-sys:cann9}" "${args[@]}" || FAILED=1
   echo
 fi
@@ -89,8 +106,8 @@ if [[ "${TARGET}" == "simpler" || "${TARGET}" == "all" ]]; then
   args=()
   [[ -n "${GIT_USER_NAME:-}" ]] && args+=(--build-arg "GIT_USER_NAME=${GIT_USER_NAME}")
   [[ -n "${GIT_USER_EMAIL:-}" ]] && args+=(--build-arg "GIT_USER_EMAIL=${GIT_USER_EMAIL}")
-  [[ -n "${FORK_REMOTE_NAME:-}" ]] && args+=(--build-arg "FORK_REMOTE_NAME=${FORK_REMOTE_NAME}")
-  [[ -n "${FORK_REMOTE_URL:-}" ]] && args+=(--build-arg "FORK_REMOTE_URL=${FORK_REMOTE_URL}")
+  [[ -n "${SIMPLER_FORK_REMOTE_NAME:-}" ]] && args+=(--build-arg "FORK_REMOTE_NAME=${SIMPLER_FORK_REMOTE_NAME}")
+  [[ -n "${SIMPLER_FORK_REMOTE_URL:-}" ]] && args+=(--build-arg "FORK_REMOTE_URL=${SIMPLER_FORK_REMOTE_URL}")
   build_image "simpler" "Dockerfile.simpler.dev.cann9.0" "simpler-dev:cann9" "${SIMPLER_BASE_IMAGE:-simpler-cann9}" "${args[@]}" || FAILED=1
   echo
 fi

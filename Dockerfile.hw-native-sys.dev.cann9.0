@@ -1,9 +1,11 @@
+# syntax=docker/dockerfile:1
 # Personal dev layer on top of pypto3-hw-native-sys:cann9.
 #
-# Bakes personal git identity + fork remote + an editable install so a
-# `docker run` drops you straight into a ready-to-hack pypto checkout,
-# instead of re-running the same setup by hand every time (see
-# ../pypto-tooling/personal_setup.md).
+# Bakes your git identity + (optionally) a fork remote + an editable install
+# so a `docker run` drops you straight into a ready-to-hack pypto checkout,
+# instead of re-running the same setup by hand every time. Defaults are
+# generic — pass --build-arg GIT_USER_NAME/GIT_USER_EMAIL/FORK_REMOTE_URL to
+# personalize (see ../pypto-tooling/personal_setup.md for one example).
 #
 # PREREQUISITE — build the base image first:
 #   ./scripts/build-npu-images.sh pypto
@@ -24,9 +26,9 @@
 # RUN: identical flags to pypto3-hw-native-sys:cann9 — see that Dockerfile's
 # RUN section (single-device vs multi-device/HCCL with --pid=host).
 #
-# INSIDE CONTAINER (fork already fetched at build time):
+# INSIDE CONTAINER (only if FORK_REMOTE_URL was set at build time):
 #   cd ${PYPTO_DIR}
-#   git checkout -b my-branch fork-gbisbas/some-remote-branch
+#   git checkout -b my-branch <fork-remote>/some-remote-branch
 #   pip install --no-build-isolation -e ".[dev]"   # only needed again after checkout
 #
 # HCCL: LD_PRELOAD is intentionally NOT baked in here either — same VS Code
@@ -38,29 +40,33 @@
 ARG BASE_IMAGE=pypto3-hw-native-sys:cann9
 FROM ${BASE_IMAGE}
 
-ARG GIT_USER_NAME="georgebisbas"
-ARG GIT_USER_EMAIL="georgios.bismpas@h-partners.com"
-ARG FORK_REMOTE_NAME=fork-gbisbas
-ARG FORK_REMOTE_URL=https://github.com/georgebisbas/pypto.git
+ARG GIT_USER_NAME="Your Name"
+ARG GIT_USER_EMAIL="you@example.com"
+ARG FORK_REMOTE_NAME=
+ARG FORK_REMOTE_URL=
 
 RUN git config --global user.name "${GIT_USER_NAME}" && \
     git config --global user.email "${GIT_USER_EMAIL}" && \
     git config --global pull.rebase true && \
     git config --global --add safe.directory "${PYPTO_DIR}"
 
-# Best-effort: don't fail the build if the fork is unreachable (e.g. offline rebuild).
-RUN cd "${PYPTO_DIR}" && \
-    git remote add "${FORK_REMOTE_NAME}" "${FORK_REMOTE_URL}" && \
-    (git fetch "${FORK_REMOTE_NAME}" || echo "WARNING: could not fetch ${FORK_REMOTE_NAME} at build time — run 'git fetch ${FORK_REMOTE_NAME}' inside the container")
+# No personal fork is configured unless FORK_REMOTE_URL is passed via
+# --build-arg — generic defaults above so a plain `docker build` doesn't bake
+# in someone else's identity/fork. Best-effort: don't fail the build if the
+# fork is unreachable (e.g. offline rebuild).
+RUN if [ -n "${FORK_REMOTE_URL}" ]; then \
+      cd "${PYPTO_DIR}" && \
+      git remote add "${FORK_REMOTE_NAME:-fork}" "${FORK_REMOTE_URL}" && \
+      (git fetch "${FORK_REMOTE_NAME:-fork}" || echo "WARNING: could not fetch ${FORK_REMOTE_NAME:-fork} at build time — run 'git fetch ${FORK_REMOTE_NAME:-fork}' inside the container"); \
+    fi
 
 # Base image installs pypto non-editably (pip install ".[dev]"). Re-install
 # editable so source edits made inside the container (e.g. after checking out
 # a fork branch) take effect without a full reinstall.
-RUN cd "${PYPTO_DIR}" && pip install --no-build-isolation -e ".[dev]"
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd "${PYPTO_DIR}" && pip install --no-build-isolation -e ".[dev]"
 
-# HCCL preload helper — a function, not an exported var, so it is a no-op
-# until explicitly called (safe under VS Code's userEnvProbe).
-RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
+# hccl-preload shell function is inherited from the base image.
 
 WORKDIR ${PYPTO_DIR}
 CMD ["bash"]

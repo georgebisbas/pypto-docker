@@ -1,0 +1,9 @@
+# Applies to builds whose context is this repo (pypto-docker/) itself —
+# i.e. Dockerfile.simpler.sim.ubuntu22.04 and the .dev. Dockerfiles.
+# Dockerfile.server.cann:9.0 is built with the *parent* directory as context
+# (see its header) and is unaffected by this file.
+.git
+.claude
+dockerfile_skills
+build_skills
+*.md

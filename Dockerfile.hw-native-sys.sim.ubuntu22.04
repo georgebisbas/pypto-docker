@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Standalone PyPTO local simulation image (x86_64, no NPU required)
 #
 # Purpose:
@@ -86,12 +87,14 @@ ENV PYPTO_DIR=${INSTALL_PREFIX}/pypto \
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_CACHE_DIR=/tmp/pip-cache
+    PYTHONUNBUFFERED=1
 
 # Simulator builds need modern GCC for _Float16 code paths.
-RUN apt-get update && \
-  apt-get install -y --no-install-recommends software-properties-common gnupg gpg-agent dirmngr && \
+# apt cache/lists are BuildKit cache mounts, not image layers — no rm -rf needed.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends software-properties-common gnupg gpg-agent dirmngr && \
     add-apt-repository -y ppa:deadsnakes/ppa && \
     add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
     apt-get update && \
@@ -101,8 +104,7 @@ RUN apt-get update && \
       git curl ca-certificates \
       ccache cmake ninja-build pkg-config \
       ripgrep nano \
-      bash-completion gh && \
-    rm -rf /var/lib/apt/lists/*
+      bash-completion gh
 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 1 && \
     update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 1 && \
@@ -117,16 +119,17 @@ ENV CC=gcc-15 \
     CXX=g++-15
 
 # Build inputs pinned to pypto's build-constraints.txt; torch to CI's TORCH_PIN.
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip setuptools wheel && \
+    pip install \
       "scikit-build-core==1.0.3" "nanobind==2.15.0" \
       "ninja==1.13.0" "cmake==4.4.2" && \
-    pip install --no-cache-dir \
+    pip install \
       "numpy>=2.0" \
       "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
       "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
       "pre-commit==4.5.1" && \
-    pip install --no-cache-dir \
+    pip install \
       "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
@@ -183,7 +186,8 @@ ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 WORKDIR ${PYPTO_DIR}
 
 # Install runtime first, then pypto (dev extras include pytest tooling).
-RUN rm -rf ./runtime/build && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    rm -rf ./runtime/build && \
     pip install --no-build-isolation -v ./runtime && \
     pip install --no-build-isolation -v ".[dev]"
 
