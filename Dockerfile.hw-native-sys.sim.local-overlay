@@ -4,3 +4,5 @@ ARG BASE_IMAGE=pypto3-hw-native-sys:sim-xdsl-tasktile
 FROM ${BASE_IMAGE}
 COPY python/pypto/ir/tasktile_export.py /opt/pypto/python/pypto/ir/tasktile_export.py
 COPY python/pypto/ir/__init__.py /opt/pypto/python/pypto/ir/__init__.py
+COPY python/pypto/ir/tasktile_export.py /usr/local/lib/python3.10/dist-packages/pypto/ir/tasktile_export.py
+COPY python/pypto/ir/__init__.py /usr/local/lib/python3.10/dist-packages/pypto/ir/__init__.py
