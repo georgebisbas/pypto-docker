@@ -1,0 +1,6 @@
+# Small local simulation overlay for pure-Python PyPTO changes.
+# Build with a staging context containing python/pypto/ir files.
+ARG BASE_IMAGE=pypto3-hw-native-sys:sim-xdsl-tasktile
+FROM ${BASE_IMAGE}
+COPY python/pypto/ir/tasktile_export.py /opt/pypto/python/pypto/ir/tasktile_export.py
+COPY python/pypto/ir/__init__.py /opt/pypto/python/pypto/ir/__init__.py

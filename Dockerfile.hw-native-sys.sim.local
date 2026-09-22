@@ -1,0 +1,13 @@
+# Local simulation overlay for a private PyPTO checkout.
+# Build from the PyPTO repository root:
+#   docker build -f ../pypto-docker/Dockerfile.hw-native-sys.sim.local \
+#     -t pypto3-hw-native-sys:sim-xdsl-tasktile-local .
+ARG BASE_IMAGE=pypto3-hw-native-sys:sim-xdsl-tasktile
+FROM ${BASE_IMAGE}
+
+COPY . /opt/pypto
+WORKDIR /opt/pypto
+
+# Rebuild the mounted checkout against the simulator toolchain in the base
+# image.  This is intentionally separate from the networked pinned image.
+RUN python3 -m pip install --no-deps --no-build-isolation -e .
