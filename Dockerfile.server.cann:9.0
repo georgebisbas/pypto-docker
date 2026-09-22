@@ -131,7 +131,7 @@ WORKDIR /workspace/hw-native-sys/pypto
 # Install PTO-ISA (required by system tests that call code_runner).
 # Pinned to the commit from the runtime submodule's runtime/pto_isa.pin
 # (the single source of truth per pypto CI toolchain job; see PR #1851).
-ARG PTO_ISA_COMMIT=3b4faf67aebb3e0d41be7952c56908b3adba7a8f
+ARG PTO_ISA_COMMIT=c0d7148e95ef73bd12a73165fdce4b723a3b7e72
 RUN timeout 60 git clone https://github.com/hw-native-sys/pto-isa.git /opt/pto-isa \
       || { rm -rf /opt/pto-isa; timeout 300 git clone https://gitcode.com/luohuan40/pto-isa.git /opt/pto-isa; } && \
   git -C /opt/pto-isa checkout "${PTO_ISA_COMMIT}" && \
@@ -143,8 +143,8 @@ ENV PTO_ISA_ROOT=/opt/pto-isa
 # cp310 manylinux wheel (mirrors pypto CI's toolchain job since PR #2291).
 # The wheel is CPython 3.10-only (cp310 ABI tag), so it is installed into
 # a dedicated python3.10 venv; the base image is Python 3.12.
-ARG PTOAS_VERSION=v0.63
-ARG PTOAS_SHA256=d2d73cf3ab5013a7055a4771616f638a8ce66bc0b91c997e1528c8f552d24d7e
+ARG PTOAS_VERSION=v0.65
+ARG PTOAS_SHA256=aea205361edd3d4e916b2c1353112fbcf2d1588c62cdf905c9f30856d4ecb744
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \

@@ -133,7 +133,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       "torch==2.10.0" --index-url https://download.pytorch.org/whl/cpu
 
 # Clone pypto with submodules so runtime/simpler sources are present.
-ARG PYPTO_COMMIT=166bf7ac40924bacf6035b9fea6a0b9bbc08f9db
+ARG PYPTO_COMMIT=b8353728d55c951534e8e51fdfdcf00a87aaae1f
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -165,14 +165,14 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
     git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
 
 # Install ptoas x86_64 used by simulator CI jobs (wheel from GitHub Release).
-ARG PTOAS_VERSION=v0.63
-ARG PTOAS_WHEEL_SHA256=647716e7817091814c61b6b21fb1ac110fc9efde5b7f067b54de4ab4068ebcff
+ARG PTOAS_VERSION=v0.65
+ARG PTOAS_WHEEL_SHA256=28ba50ddc684b3b011262cd26677a2509428beaf5e267cb6bee5b4c1f776712b
 RUN curl --fail --location --retry 3 --retry-all-errors \
-      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.63-cp310-cp310-manylinux_2_34_x86_64.whl" \
-      -o /tmp/ptoas-0.63-cp310-cp310-manylinux_2_34_x86_64.whl && \
-    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.63-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
-    python3 -m pip install /tmp/ptoas-0.63-cp310-cp310-manylinux_2_34_x86_64.whl && \
-    rm -f /tmp/ptoas-0.63-cp310-cp310-manylinux_2_34_x86_64.whl
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl" \
+      -o /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
+    python3 -m pip install /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    rm -f /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl
 
 # PTO_ISA_ROOT is NO LONGER read by the pypto runtime to select the pto-isa
 # checkout (pypto PR #2410 deleted pypto's own resolver and delegates to

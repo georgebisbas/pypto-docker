@@ -25,7 +25,7 @@
 #   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # BUILD (custom prefix / pinned pto-isa / different commit):
-#   docker build --build-arg PYPTO_COMMIT=166bf7ac40924bacf6035b9fea6a0b9bbc08f9db -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#   docker build --build-arg PYPTO_COMMIT=b8353728d55c951534e8e51fdfdcf00a87aaae1f -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # RUN (single-device, NO HCCL):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
@@ -38,7 +38,7 @@
 # COMMANDS INSIDE CONTAINER — mirrors pypto .github/workflows/ci.yml job order.
 #   INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0. CANN env is sourced from bash.bashrc.
 #   Device lists are inlined below (change 0,1,2,3 / 0 to match your host).
-#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently 3b4faf67aebb3e0d41be7952c56908b3adba7a8f)
+#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently c0d7148e95ef73bd12a73165fdce4b723a3b7e72)
 #   unless PTO_ISA_COMMIT was overridden at build.
 #
 #   cd /opt/pypto
@@ -163,7 +163,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
 # GitHub does not allow shallow-fetching arbitrary SHAs directly.
-ARG PYPTO_COMMIT=166bf7ac40924bacf6035b9fea6a0b9bbc08f9db
+ARG PYPTO_COMMIT=b8353728d55c951534e8e51fdfdcf00a87aaae1f
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -217,8 +217,8 @@ ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 # Install PTOAS (cp310 manylinux wheel — mirrors pypto CI's toolchain job since
 # PR #2291). The wheel is CPython 3.10-only (cp310 ABI tag), so it is
 # installed into a dedicated python3.10 venv; the base image is Python 3.12.
-ARG PTOAS_VERSION=v0.63
-ARG PTOAS_SHA256=d2d73cf3ab5013a7055a4771616f638a8ce66bc0b91c997e1528c8f552d24d7e
+ARG PTOAS_VERSION=v0.65
+ARG PTOAS_SHA256=aea205361edd3d4e916b2c1353112fbcf2d1588c62cdf905c9f30856d4ecb744
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
