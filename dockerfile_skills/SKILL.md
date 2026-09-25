@@ -370,6 +370,8 @@ bind-mount the queue volume (`-v /var/lib/taskqueue:/var/lib/taskqueue`), expose
 `task-submit --device auto … --run '… $TASK_DEVICE'` (`--device-num N` for multi-card).
 
 Full verified instructions and pitfalls: [`../TASK_QUEUE.md`](../TASK_QUEUE.md).
+(The `COMMANDS INSIDE CONTAINER` blocks in the Dockerfile headers are the direct/unqueued form —
+keep the commands, add the `task-submit` wrapper on a queue host.)
 ⚠️ On a queue host, `export LD_PRELOAD=libhccl.so` **before** `task-submit` kills the task
 instantly (exit 137) — scope the preload to the job command: `--run 'LD_PRELOAD=… pytest …'`.
 

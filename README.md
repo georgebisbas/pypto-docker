@@ -23,7 +23,8 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [Dockerfile.pypto-lib.sim.ubuntu22.04](Dockerfile.pypto-lib.sim.ubuntu22.04): Thin layer on `pypto3-hw-native-sys:sim` with a baked `pypto-lib` checkout for example/model sim smoke tests.
 - [Dockerfile.pypto-lib.cann9.0](Dockerfile.pypto-lib.cann9.0): Thin layer on `pypto3-hw-native-sys:cann9` with a baked `pypto-lib` checkout for onboard NPU model runs.
 - [docker-entrypoint-cann.sh](docker-entrypoint-cann.sh): Runtime helper for workspace/runtime symlink handling.
-- [scripts/](scripts/): Image build scripts (`build-npu-images.sh`, `build-sim-images.sh`, `build-npu-dev-images.sh`, `fetch-pull-mains.sh`, `run-simpler-l3-sim.sh`).
+- [TASK_QUEUE.md](TASK_QUEUE.md): **Working on a shared queue host** — join containers to the NPU card queue (`task-submit`), run tests/distributed jobs under it, pitfalls and troubleshooting.
+- [scripts/](scripts/): Image build scripts (`build-npu-images.sh`, `build-sim-images.sh`, `build-npu-dev-images.sh`, `fetch-pull-mains.sh`, `run-simpler-l3-sim.sh`) plus queue helpers (`attach-taskqueue.sh`, `queue-smoke.sh`).
 
 ## Purpose of Each File
 
@@ -37,6 +38,7 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [Dockerfile.pypto-lib.sim.ubuntu22.04](Dockerfile.pypto-lib.sim.ubuntu22.04): Build a pypto-lib sim image (extends `pypto3-hw-native-sys:sim`) for example/model smoke tests on `a2a3sim`/`a5sim`.
 - [Dockerfile.pypto-lib.cann9.0](Dockerfile.pypto-lib.cann9.0): Build a pypto-lib NPU image (extends `pypto3-hw-native-sys:cann9`) for onboard model runs on Ascend 910B.
 - [docker-entrypoint-cann.sh](docker-entrypoint-cann.sh): Runtime helper script that normalizes runtime layout (workspace/runtime symlink behavior) before launching the container command.
+- [TASK_QUEUE.md](TASK_QUEUE.md): Verified instructions for running these containers on the shared NPU hosts (`task-submit` queue): what to change vs. the recipes above, queue-joined container setup, test/distributed commands, one-shot host runs, and pitfalls (incl. the libhccl preload trap).
 
 ## Recommended Image: `Dockerfile.hw-native-sys.cann9.0`
 
@@ -46,6 +48,10 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - Build works from any directory using stdin input.
 - Repositories (`pypto`, `pto-isa`) are cloned during build.
 - Key behavior is controlled via build args (`CANN_VERSION`, `INSTALL_PREFIX`, `PYPTO_COMMIT`, `PTO_ISA_COMMIT`).
+
+> **On a shared queue host (`192.168.150.11` / `.12`)?** Read [TASK_QUEUE.md](TASK_QUEUE.md)
+> first — every card-touching command, including tests inside these containers, must go
+> through `task-submit`.
 
 ## Build Requirements
 
@@ -188,7 +194,9 @@ GitHub forks). A worked example of one maintainer's own values lives in
 
 Run the resulting images with the same flags as the base cann9 images (see
 "Runtime Notes (Ascend 910B)" below) — just swap the tag for
-`pypto3-dev:cann9` / `simpler-dev:cann9`.
+`pypto3-dev:cann9` / `simpler-dev:cann9`. On the shared queue hosts, also apply the
+"Shared queue hosts" section (queue volume mount + `scripts/attach-taskqueue.sh`) — dev
+images join the queue exactly like the base images.
 
 Build pypto-lib NPU image (requires `pypto3-hw-native-sys:cann9` base):
 
@@ -387,6 +395,10 @@ recipes above you add exactly three things:
 Copy-paste instructions, verified examples (small ST + 2-card/4-card distributed L3 allreduce)
 and the pitfalls that actually bite: **[TASK_QUEUE.md](TASK_QUEUE.md)**. (`192.168.150.13` has
 no queue — use the recipes above directly there; `:sim` images never need it.)
+
+The `RUN` / `COMMANDS INSIDE CONTAINER` blocks in each Dockerfile header show the same commands
+in their **direct (unqueued) form** — on a queue host, keep the commands and add the
+`task-submit … --run '…'` wrapper around device-touching ones, as in TASK_QUEUE.md.
 
 ### HCCL Bandwidth Benchmarks (`pytorch-hccl-tests:cann9`)
 

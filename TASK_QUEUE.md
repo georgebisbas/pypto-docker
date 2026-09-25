@@ -54,6 +54,9 @@ task-submit --device auto --device-num 2 --max-time 3600 --timeout 0 \
 
 The **Dockerfiles need no changes** — they are already queue-compatible (no
 `ASCEND_RT_VISIBLE_DEVICES`, no image-wide `LD_PRELOAD`, no `set_env.sh` auto-sourcing).
+Likewise the `COMMANDS INSIDE CONTAINER` blocks in the Dockerfile headers stay correct — they
+are the **direct (unqueued) form**; on a queue host you keep the commands and add the
+`task-submit … --run '…'` wrapper around device-touching ones (§4–§6).
 What changes is the **launch layer**:
 
 | # | Change | Where |
@@ -83,6 +86,9 @@ docker build -t pypto3-dev:cann9 - < Dockerfile.hw-native-sys.dev.cann9.0
 ```
 
 (Pin commits per `Dockerfile.*` headers if you need a specific `PYPTO_COMMIT`/`PTOAS_VERSION`.)
+
+Dev images (`pypto3-dev:cann9`, `simpler-dev:cann9`) join the queue exactly like their base
+images — same run flags, same `attach-taskqueue.sh` step.
 
 ## 3. Create + join a container (verified recipe)
 
@@ -130,6 +136,11 @@ Expected output (shape):
 > A bind-mount **cannot** be added to a live container — if the queue volume is missing,
 > recreate the container (keeping its flags/mounts). Nothing else needs `docker exec` at
 > runtime: the client runs in place, as the caller.
+
+If this host's queue volume is **not** at `/var/lib/taskqueue` (ask the admin, or discover it:
+`docker inspect <already-joined-container> --format '{{range .Mounts}}{{.Source}}->{{.Destination}} {{end}}'`
+— the mount containing `bin/task-submit`, `pending/`, `locks/` is the volume), use that path
+in the `-v` above **and** as the second argument: `scripts/attach-taskqueue.sh <container> <volume>`.
 
 ## 4. Run tests through the queue (verified)
 
@@ -290,6 +301,7 @@ killed at 300 s. The 3600 s cap is a hard limit; split longer work.
 | `aclInit` / `aclrtSetDevice` failed | Missing device/driver mounts | Add `--privileged` + driver/npu-smi mounts (README recipes) |
 | pytest exit 5, "0 selected" | Platform deselection | Add the right `--platform=` (P4) |
 | Run numbers look noisy | Collected while another job runs on other cards | Expected on a shared box; the lock protects your card, not the host's bandwidth. Keep to your granted cards |
+| `--list` errors / nothing ever runs | Queue (broker) looks down, or wrong volume path | Tell the admin — **never** start a broker yourself; re-check the volume path (§3) |
 
 ## 9. Housekeeping
 
