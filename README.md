@@ -205,6 +205,33 @@ docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 docker build -t pypto-lib-hw-native-sys:cann9 - < Dockerfile.pypto-lib.cann9.0
 ```
 
+## Claude Code in containers
+
+The sim images (`Dockerfile.hw-native-sys.sim.ubuntu22.04`,
+`Dockerfile.simpler.sim.ubuntu22.04`) and the dev images
+(`Dockerfile.hw-native-sys.dev.cann9.0`, `Dockerfile.simpler.dev.cann9.0`) ship
+the `claude` CLI. It is installed early (with the system tools in the sim images,
+right after `FROM` in the dev images), so bumping pypto/simpler commits reuses the
+cached Claude layer instead of reinstalling it. Images built on top of them
+(`pypto-lib` sim, `sim.local`, `sim.local-overlay`) inherit it.
+
+- `--build-arg CLAUDE_VERSION=<x.y.z>` pins a version (default `stable`);
+  `--build-arg INSTALL_CLAUDE=0` skips it. Auto-update is disabled in the image —
+  rebuild with a new `CLAUDE_VERSION` to upgrade (this also rebuilds the layers
+  after it, i.e. the pypto/simpler build).
+- No credentials are baked in. Authenticate at `docker run` time, either by
+  sharing your host login:
+
+  ```bash
+  docker run --rm -it -v ~/.claude:/root/.claude -v ~/.claude.json:/root/.claude.json <image>
+  ```
+
+  or, on headless/shared hosts, with a long-lived token from `claude setup-token`
+  (run once on the host): `-e CLAUDE_CODE_OAUTH_TOKEN=...` (or `-e ANTHROPIC_API_KEY=...`).
+  Never pass tokens as `--build-arg` — they end up in the image history.
+- Containers run as root; `claude --dangerously-skip-permissions` refuses to run
+  as root unless you also pass `-e IS_SANDBOX=1`.
+
 ## Runtime Notes (Local Simulation)
 
 This mode is for local CPU-hosted simulator workflows only (`a2a3sim`, `a5sim`):

@@ -118,6 +118,21 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python
 ENV CC=gcc-15 \
     CXX=g++-15
 
+# Claude Code CLI (native installer — no Node needed; x86_64 + aarch64).
+# Placed with the system tools on purpose: the pip/pypto layers below change far
+# more often, and bumping them must not reinstall (or silently upgrade) Claude.
+# Pass --build-arg INSTALL_CLAUDE=0 to skip. No credentials are baked in —
+# authenticate at `docker run` time (see README "Claude Code in containers").
+ARG INSTALL_CLAUDE=1
+ARG CLAUDE_VERSION=stable
+RUN if [ "${INSTALL_CLAUDE}" = "1" ]; then \
+      curl -fsSL https://claude.ai/install.sh | bash -s -- "${CLAUDE_VERSION}" && \
+      ln -sf /root/.local/bin/claude /usr/local/bin/claude && \
+      claude --version; \
+    fi
+# Keep the image reproducible; rebuild with a new CLAUDE_VERSION to upgrade.
+ENV DISABLE_AUTOUPDATER=1
+
 # Build inputs pinned to pypto's build-constraints.txt; torch to CI's TORCH_PIN.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel && \

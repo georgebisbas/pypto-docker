@@ -40,6 +40,22 @@
 ARG BASE_IMAGE=pypto3-hw-native-sys:cann9
 FROM ${BASE_IMAGE}
 
+# Claude Code CLI (native installer — no Node needed; x86_64 + aarch64).
+# Placed right after FROM so edits to the git/editable-install layers below
+# don't reinstall (or silently upgrade) Claude. A new BASE_IMAGE still
+# re-runs it — nothing in a child layer can avoid that.
+# Pass --build-arg INSTALL_CLAUDE=0 to skip. No credentials are baked in —
+# authenticate at `docker run` time (see README "Claude Code in containers").
+ARG INSTALL_CLAUDE=1
+ARG CLAUDE_VERSION=stable
+RUN if [ "${INSTALL_CLAUDE}" = "1" ]; then \
+      curl -fsSL https://claude.ai/install.sh | bash -s -- "${CLAUDE_VERSION}" && \
+      ln -sf /root/.local/bin/claude /usr/local/bin/claude && \
+      claude --version; \
+    fi
+# Keep the image reproducible; rebuild with a new CLAUDE_VERSION to upgrade.
+ENV DISABLE_AUTOUPDATER=1
+
 ARG GIT_USER_NAME="Your Name"
 ARG GIT_USER_EMAIL="you@example.com"
 ARG FORK_REMOTE_NAME=
