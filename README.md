@@ -351,11 +351,17 @@ docker run --rm -it \
 
 The same runtime rule applies to `simpler-cann9` and `pytorch-hccl-tests:cann9`: include `--pid=host` for distributed/HCCL workflows.
 
-Before HCCL tests in **pypto** or **simpler** images, export `LD_PRELOAD` in your shell (not baked into the image):
+Before HCCL tests in **pypto** or **simpler** images, set `LD_PRELOAD` (it is **not** baked into the image):
 
 ```bash
-export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so   # direct / no-queue runs only
 ```
+
+> **On a shared queue host, do not export this in your shell before `task-submit`** —
+> preloading `libhccl.so` into the task client kills the task instantly (`completed (exit=137)`,
+> no log file). Scope it to the submitted command instead:
+> `task-submit … --run 'LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so pytest …'`.
+> See [TASK_QUEUE.md](TASK_QUEUE.md) pitfall P1.
 
 The **pytorch-hccl-tests** image uses torch HCCL directly and does not need `LD_PRELOAD`; it still requires `--pid=host` for multi-rank NPU collectives.
 
@@ -366,6 +372,21 @@ Mount only the host driver path at runtime:
 ```
 
 Do not mount /usr/local/Ascend from host, because it can shadow the image's baked CANN version.
+
+### Shared queue hosts (`192.168.150.11` / `.12`) — run everything through `task-submit`
+
+These hosts share their NPU cards across users through a per-card lock queue: `task-submit`
+grants a card, locks it, and only then runs your command. **Every command that touches a card —
+including tests run inside these containers — must go through the queue.** Relative to the
+recipes above you add exactly three things:
+
+1. bind-mount the queue volume: `-v /var/lib/taskqueue:/var/lib/taskqueue`,
+2. expose the client inside the container: `scripts/attach-taskqueue.sh <container>`,
+3. wrap NPU commands: `task-submit --device auto … --run '… $TASK_DEVICE'`.
+
+Copy-paste instructions, verified examples (small ST + 2-card/4-card distributed L3 allreduce)
+and the pitfalls that actually bite: **[TASK_QUEUE.md](TASK_QUEUE.md)**. (`192.168.150.13` has
+no queue — use the recipes above directly there; `:sim` images never need it.)
 
 ### HCCL Bandwidth Benchmarks (`pytorch-hccl-tests:cann9`)
 

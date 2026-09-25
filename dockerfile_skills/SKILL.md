@@ -360,6 +360,19 @@ Additional for HCCL / multi-device:
 --pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
 ```
 
+### Shared queue hosts — `task-submit`
+
+On `192.168.150.11` / `.12` (the queue hosts — `.13` has none) every NPU command goes through
+the per-card lock queue, including commands run inside these containers. Container-side changes:
+bind-mount the queue volume (`-v /var/lib/taskqueue:/var/lib/taskqueue`), expose the tools with
+`scripts/attach-taskqueue.sh <container>` (symlinks `task-submit`, `npu-lock`, and
+`/etc/taskqueue.conf`), then wrap NPU commands as
+`task-submit --device auto … --run '… $TASK_DEVICE'` (`--device-num N` for multi-card).
+
+Full verified instructions and pitfalls: [`../TASK_QUEUE.md`](../TASK_QUEUE.md).
+⚠️ On a queue host, `export LD_PRELOAD=libhccl.so` **before** `task-submit` kills the task
+instantly (exit 137) — scope the preload to the job command: `--run 'LD_PRELOAD=… pytest …'`.
+
 ### CANN mount rules
 
 | Mount | OK? | Why |
@@ -375,6 +388,8 @@ Additional for HCCL / multi-device:
 
 `LD_PRELOAD=libhccl.so` is **NOT** set image-wide. Setting it as `ENV` or in `bashrc`
 injects libhccl.so into every process including VS Code's server node → hang on attach.
+On queue hosts set it **inside the submitted command** (`--run 'LD_PRELOAD=… pytest …'`), not
+in the shell before `task-submit` — see "Shared queue hosts" above.
 
 - **pypto / simpler images:** set it manually in the shell before running HCCL tests:
 - **pytorch-hccl-tests image:** `LD_PRELOAD` is not needed (torch HCCL path; no `host_runtime.so`).
