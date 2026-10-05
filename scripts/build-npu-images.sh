@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build the Ascend 910B (CANN) Docker images for pypto and simpler.
+# Build the Ascend 910B (CANN) Docker images for pypto, simpler, and pto-kernels.
 # Intended to run directly on the NPU host (build itself needs no NPU access,
 # only GitHub connectivity; the resulting images require Ascend hardware at
 # `docker run` time, see the RUN blocks in each Dockerfile).
 #
 # Usage:
-#   ./scripts/build-npu-images.sh [pypto|simpler|all]
+#   ./scripts/build-npu-images.sh [pypto|simpler|pto-kernels|all]
 #
 # Env overrides (only applied if non-empty; otherwise Dockerfile defaults apply):
 #   CANN_VERSION      selects base image tag and cann-* paths (both images)
@@ -14,10 +14,12 @@
 #   PTO_ISA_COMMIT    pin pto-isa commit                          (both images)
 #   PTOAS_VERSION     pin PTOAS release                          (pypto image only)
 #   SIMPLER_COMMIT    pin simpler commit                          (simpler image only)
+#   PTO_KERNELS_COMMIT pin pto-kernels commit                     (pto-kernels image only)
 #
 # Images:
 #   pypto3-hw-native-sys:cann9  <- Dockerfile.hw-native-sys.cann9.0
 #   simpler-cann9                <- Dockerfile.simpler.cann9.0
+#   pto-kernels:cann9            <- Dockerfile.pto-kernels.cann9.0  (sim + NPU)
 
 set -euo pipefail
 
@@ -41,9 +43,9 @@ err()   { echo "${C_RED}ERROR:${C_RESET} $*" >&2; }
 header(){ echo "${C_BOLD}${C_BLUE}=== $* ===${C_RESET}"; }
 
 case "${TARGET}" in
-  pypto|simpler|all) ;;
+  pypto|simpler|pto-kernels|all) ;;
   *)
-    echo "Usage: $0 [pypto|simpler|all]" >&2
+    echo "Usage: $0 [pypto|simpler|pto-kernels|all]" >&2
     exit 2
     ;;
 esac
@@ -93,6 +95,15 @@ if [[ "${TARGET}" == "simpler" || "${TARGET}" == "all" ]]; then
   echo
 fi
 
+if [[ "${TARGET}" == "pto-kernels" || "${TARGET}" == "all" ]]; then
+  args=()
+  [[ -n "${CANN_VERSION:-}" ]] && args+=(--build-arg "CANN_VERSION=${CANN_VERSION}")
+  [[ -n "${INSTALL_PREFIX:-}" ]] && args+=(--build-arg "INSTALL_PREFIX=${INSTALL_PREFIX}")
+  [[ -n "${PTO_KERNELS_COMMIT:-}" ]] && args+=(--build-arg "PTO_KERNELS_COMMIT=${PTO_KERNELS_COMMIT}")
+  build_image "pto-kernels" "Dockerfile.pto-kernels.cann9.0" "pto-kernels:cann9" "${args[@]}" || FAILED=1
+  echo
+fi
+
 if [[ "${FAILED}" -ne 0 ]]; then
   echo "${C_RED}${C_BOLD}Done with errors.${C_RESET}"
   exit 1
@@ -101,3 +112,4 @@ echo "${C_GREEN}${C_BOLD}Done. NPU image(s) built.${C_RESET}"
 echo "Run (single-device, see Dockerfile header for multi-device/HCCL flags):"
 echo "  docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9"
 echo "  docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9"
+echo "  docker run --rm pto-kernels:cann9 bash -lc 'cd /opt/pto-kernels/.skills/testing-pto-kernels/reference/static_single_core/a2a3 && ./run_sim.sh msprof --kernel add'  # sim, no NPU"

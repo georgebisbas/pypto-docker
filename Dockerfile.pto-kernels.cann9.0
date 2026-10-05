@@ -1,0 +1,134 @@
+# syntax=docker/dockerfile:1
+# pto-kernels image for Ascend 910B — build, CA-model simulation, real-NPU runs
+#
+# Standalone: clones huawei-csl/pto-kernels from GitHub at build time; no local
+# build context required. CANN comes from the official quay.io/ascend base,
+# which already ships everything the simulation path needs: bisheng, the
+# Ascend910B2 CA-model simulator (`tools/simulator/Ascend910B2/lib`),
+# `msprof`/`cannsim`, and the CANN-bundled PTO headers (`include/pto`, selected
+# via PTO_LIB_PATH).
+#
+# Unlike the pypto/simpler images there is no separate `*.sim.` variant:
+# pto-kernels' simulator IS the CANN CA model, so this one image covers both
+# NPU-free simulation and (with device mounts) real-device runs.
+#
+# Build args:
+#   CANN_VERSION        (default: 9.1.0) — selects the quay base tag and the
+#                       /usr/local/Ascend/cann-* home. 9.1.0 is what the repo's
+#                       .gitlab-ci.yml uses and what the kernel sources need:
+#                       kernel_flash_attention.cpp instantiates the 7-argument
+#                       TPipe<> form, which the 9.0.0 headers do not have, so
+#                       the wheel build fails on 9.0.0 (the standalone
+#                       reference kernels still build there).
+#   PTO_KERNELS_COMMIT  (default: 52236e7fc7147329eef9e0118cdad789e553690f)
+#   INSTALL_PREFIX      (default: /opt)
+#
+# REQUIREMENTS:
+#   - Internet access during build (GitHub + PyPI)
+#   - Simulation: none (CPU only). Real kernel runs / pytest: 910B NPU + driver.
+#
+# BUILD:
+#   docker build -t pto-kernels:cann9 - < Dockerfile.pto-kernels.cann9.0
+#   # or: ./scripts/build-npu-images.sh pto-kernels
+#
+# SIMULATION (no NPU; the repo's CA-model reference runners):
+#   docker run --rm -e MSPROF_TIMEOUT=120 pto-kernels:cann9 bash -lc \
+#     'cd /opt/pto-kernels/.skills/testing-pto-kernels/reference/static_single_core/a2a3 && ./run_sim.sh msprof --kernel add'
+#   docker run --rm -e MSPROF_TIMEOUT=120 pto-kernels:cann9 bash -lc \
+#     'cd /opt/pto-kernels/.skills/testing-pto-kernels/reference/dynamic_multi_core/a2a3 && ./run_sim.sh msprof --kernel add --n 4096'
+#   `MSPROF_TIMEOUT` must be pre-set: run_sim.sh expands "${MSPROF_TIMEOUT}" as a
+#   command word before its own prefix assignment applies, and it runs under set -u.
+#   The scripts' literal fallback path reads cann-9.0.0, but they prefer
+#   ASCEND_HOME_PATH, which this image sets to the CANN home above.
+#
+# SIMULATION — pytest suite (each test's kernel launches are traced by the CA
+# model; the env below is required, without it conftest's torch.npu.set_device
+# fails with aclInit 507008 since a plain python process has no device):
+#   docker run --rm pto-kernels:cann9 bash -lc 'cd /opt/pto-kernels \
+#     && export PTO_SIMULATOR=1 NPU_DEVICE=npu:0 \
+#     && export LD_LIBRARY_PATH=$ASCEND_HOME_PATH/tools/simulator/Ascend910B2/lib:${LD_LIBRARY_PATH:-} \
+#     && msprof op simulator --soc-version=Ascend910B2 --timeout=300 python3 -m pytest tests/test_abs.py -x -q'
+#   `tests/test_abs.py` is the cheap smoke (98 cases, ~2.5 min). Raise msprof's
+#   `--timeout` for the matmul-heavy families (tri_inv/GDN/KDA) — they simulate
+#   far longer per case. Pass `-k` a single token (`-k float32`): msprof re-splits
+#   the command, so a quoted expression like `-k "float32 and not 256"` loses its
+#   quotes and pytest reads `and` as a path.
+#
+# WHEEL (compilation needs no NPU):
+#   docker run --rm pto-kernels:cann9 bash -lc 'cd /opt/pto-kernels && make wheel'
+#
+# REAL NPU (pytest suite — tests/conftest.py binds torch.npu at import, so a
+# device is mandatory; the wheel is pre-installed, run the suite directly):
+#   docker run --rm -it --privileged --ipc=host \
+#     -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev \
+#     pto-kernels:cann9 bash -lc 'cd /opt/pto-kernels && python3 -m pytest -v tests/'
+#
+# SCOPE NOTES:
+#   - Simulation = `.skills/testing-pto-kernels/reference/**/run_sim.sh`
+#     (modes: msprof | cannsim | linked). Deterministic, single repeat
+#     (PTO_SIMULATOR=1), tiny shapes — correctness/trace, NOT a performance
+#     venue ("do not claim real-device performance").
+#   - A5 kernels on this 910B image use CA-model paths only (`msprof`, `cannsim`,
+#     `linked`); never `./run_sim.sh direct` for A5 here (507035 fault).
+
+ARG CANN_VERSION=9.1.0
+FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
+
+ARG CANN_VERSION
+ARG PTO_KERNELS_REPO=https://github.com/huawei-csl/pto-kernels.git
+ARG PTO_KERNELS_COMMIT=52236e7fc7147329eef9e0118cdad789e553690f
+ARG INSTALL_PREFIX=/opt
+
+# Keep the CANN home explicit: run_sim.sh resolves ASCEND_HOME_PATH first, and
+# non-login shells do not source the base image's profile scripts.
+ENV ASCEND_HOME_PATH=/usr/local/Ascend/cann-${CANN_VERSION}
+ENV PTO_LIB_PATH=${ASCEND_HOME_PATH}
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      git ca-certificates
+
+RUN git clone "${PTO_KERNELS_REPO}" "${INSTALL_PREFIX}/pto-kernels" \
+ && cd "${INSTALL_PREFIX}/pto-kernels" \
+ && git checkout "${PTO_KERNELS_COMMIT}" \
+ && git submodule update --init --recursive
+
+# Python deps: the repo's own requirements (torch-npu pinned by the repo).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd "${INSTALL_PREFIX}/pto-kernels" && pip3 install -r requirements.txt
+
+# Build and install the wheel: the pytest suite imports the compiled extension
+# (`pto_kernels`), and this step compiles every kernel with bisheng into the
+# A2A3 image the tests launch. The extra index matches the repo's `make wheel`
+# target: the build-system pins torch==2.10.0+cpu, whose local version only
+# exists on the PyTorch CPU wheel index.
+#
+# The devlib entry mirrors pto-kernels CI (`build.yml`): CMake discovers
+# torch_npu by importing it, and the toolkit's libascend_hal.so stub lives only
+# in devlib. It is APPENDED, not prepended — devlib also carries a stub
+# liberror_manager.so that does not define ErrorManager::ATCReportErrMessage, so
+# putting it first makes libruntime_common.so fail to resolve that symbol and
+# the import dies. Both facts are reproduced by bare `python3 -c "import
+# torch_npu"` inside this image.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd "${INSTALL_PREFIX}/pto-kernels" \
+ && export ASCEND_CANN_PACKAGE_PATH="${ASCEND_HOME_PATH}" \
+ && export CMAKE_GENERATOR="Unix Makefiles" \
+ && export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:${ASCEND_HOME_PATH}/$(uname -m)-linux/devlib" \
+ && pip3 wheel . --no-deps --extra-index-url https://download.pytorch.org/whl/cpu -w .wheel \
+ && pip3 install .wheel/*.whl
+
+# Sanity: everything the build + simulation paths need must exist.
+RUN bash -lc 'set -e; \
+    test -x "${ASCEND_HOME_PATH}/bin/bisheng"; \
+    test -d "${ASCEND_HOME_PATH}/tools/simulator/Ascend910B2/lib"; \
+    test -f "${PTO_LIB_PATH}/include/pto/pto-inst.hpp"; \
+    command -v msprof; \
+    test -x "${INSTALL_PREFIX}/pto-kernels/.skills/testing-pto-kernels/reference/static_single_core/a2a3/run_sim.sh"; \
+    python3 -c "import torch, torch_npu, pto_kernels; print(torch.__version__, torch_npu.__version__)"'
+
+RUN printf 'source %s/bin/setenv.bash\n' "$ASCEND_HOME_PATH" > /etc/profile.d/ascend.sh
+
+WORKDIR ${INSTALL_PREFIX}/pto-kernels
+CMD ["/bin/bash"]

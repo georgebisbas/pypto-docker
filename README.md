@@ -22,6 +22,7 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [Dockerfile.simpler.sim.ubuntu22.04](Dockerfile.simpler.sim.ubuntu22.04): Standalone simpler-only simulation image (`a2a3sim`/`a5sim`) for L3 worker STs without pypto or CANN.
 - [Dockerfile.pypto-lib.sim.ubuntu22.04](Dockerfile.pypto-lib.sim.ubuntu22.04): Thin layer on `pypto3-hw-native-sys:sim` with a baked `pypto-lib` checkout for example/model sim smoke tests.
 - [Dockerfile.pypto-lib.cann9.0](Dockerfile.pypto-lib.cann9.0): Thin layer on `pypto3-hw-native-sys:cann9` with a baked `pypto-lib` checkout for onboard NPU model runs.
+- [Dockerfile.pto-kernels.cann9.0](Dockerfile.pto-kernels.cann9.0): Standalone pto-kernels image (CANN 9.1.0 base; clones `huawei-csl/pto-kernels`) — CA-model simulation, kernel/wheel builds, and real-NPU pytest runs.
 - [docker-entrypoint-cann.sh](docker-entrypoint-cann.sh): Runtime helper for workspace/runtime symlink handling.
 - [TASK_QUEUE.md](TASK_QUEUE.md): **Working on a shared queue host** — join containers to the NPU card queue (`task-submit`), run tests/distributed jobs under it, pitfalls and troubleshooting.
 - [scripts/](scripts/): Image build scripts (`build-npu-images.sh`, `build-sim-images.sh`, `build-npu-dev-images.sh`, `fetch-pull-mains.sh`, `run-simpler-l3-sim.sh`) plus queue helpers (`attach-taskqueue.sh`, `queue-smoke.sh`).
@@ -37,6 +38,7 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [Dockerfile.simpler.sim.ubuntu22.04](Dockerfile.simpler.sim.ubuntu22.04): Build a standalone simpler-only simulation image for L3 worker/collective STs on `a2a3sim` without pypto or CANN.
 - [Dockerfile.pypto-lib.sim.ubuntu22.04](Dockerfile.pypto-lib.sim.ubuntu22.04): Build a pypto-lib sim image (extends `pypto3-hw-native-sys:sim`) for example/model smoke tests on `a2a3sim`/`a5sim`.
 - [Dockerfile.pypto-lib.cann9.0](Dockerfile.pypto-lib.cann9.0): Build a pypto-lib NPU image (extends `pypto3-hw-native-sys:cann9`) for onboard model runs on Ascend 910B.
+- [Dockerfile.pto-kernels.cann9.0](Dockerfile.pto-kernels.cann9.0): Build a pto-kernels image from the official CANN base (9.1.0, as its `.gitlab-ci.yml` uses). pto-kernels' simulator is the CANN CA model (`msprof`/`cannsim`/`linked`), so one image serves both NPU-free simulation and onboard runs; the compiled `pto_kernels` wheel is pre-installed, and the tests' kernels are traced under `msprof op simulator`. The `tests/` suite still requires either that simulator wrapper or a real NPU — a plain `python3 -m pytest` has no device (its conftest binds `torch.npu` at import).
 - [docker-entrypoint-cann.sh](docker-entrypoint-cann.sh): Runtime helper script that normalizes runtime layout (workspace/runtime symlink behavior) before launching the container command.
 - [TASK_QUEUE.md](TASK_QUEUE.md): Verified instructions for running these containers on the shared NPU hosts (`task-submit` queue): what to change vs. the recipes above, queue-joined container setup, test/distributed commands, one-shot host runs, and pitfalls (incl. the libhccl preload trap).
 
