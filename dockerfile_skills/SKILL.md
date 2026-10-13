@@ -51,8 +51,11 @@ Task starts
 | `Dockerfile.pypto-lib.cann9.0` | pypto-lib on top of `pypto3-hw-native-sys:cann9` | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
 | `Dockerfile.pytorch-hccl-tests.cann9.0` | HCCL benchmarks | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
 | `Dockerfile.server.cann:9.0` | pypto dev workspace | `docker build -t img -f Dockerfile... .` | Yes (a2a3) |
+| `Dockerfile.pto-kernels.cann9.0` | huawei-csl/pto-kernels at a pinned commit + compiled wheel (CA-model sim and onboard) | `./scripts/build-npu-images.sh pto-kernels` | No for simulation; yes for real runs |
+| `Dockerfile.hw-native-sys.dev.cann9.0`, `Dockerfile.simpler.dev.cann9.0` | Personal dev layer (git identity, fork remote, editable install) on the cann9 images | `docker build -t img -f Dockerfile... .` | Yes (a2a3) |
+| `Dockerfile.hw-native-sys.sim.local`, `...sim.local-overlay` | Local overlays on a sim image for a private pypto checkout (no pins) | see file headers | No |
 
-All use `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12` as base image.
+All use `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12` as base image, **except** `Dockerfile.pto-kernels.cann9.0`, which uses CANN **9.1.0** (its kernel sources need headers the 9.0.0 toolchain lacks).
 
 ## When to update Dockerfiles
 
@@ -177,6 +180,14 @@ As of `029e745b` the Makefile declares `export WORLD_SIZE ?= 2`, so a plain env 
 | 3 | pip deps changed in pypto CI Dockerfile? | Same as hw-native-sys check #4 | Update pip install RUN lines |
 
 Note: pypto + simpler are mounted from host at runtime, not pinned in the Dockerfile. Only pto-isa and PTOAS are cloned/downloaded at build time.
+
+### `Dockerfile.pto-kernels.cann9.0` — pto-kernels (huawei-csl)
+
+| # | Check | Command | What to update if drifted |
+|---|-------|---------|--------------------------|
+| 1 | pto-kernels `main` ahead of `PTO_KERNELS_COMMIT`? | `git ls-remote https://github.com/huawei-csl/pto-kernels.git HEAD` (also checked by `scripts/dockerfile-sync-check.sh`) | `ARG PTO_KERNELS_COMMIT` + header comment default |
+| 2 | CANN base still what pto-kernels CI uses? | Read `.gitlab-ci.yml` in pto-kernels at the pinned commit | `ARG CANN_VERSION` + header comment |
+| 3 | Build workarounds still needed? | See header: PyTorch CPU index for `torch==2.10.0+cpu`; devlib **appended** (never prepended) to `LD_LIBRARY_PATH` | Remove only after verifying the build/import still succeeds |
 
 ### Quick bulk check (all Dockerfiles)
 

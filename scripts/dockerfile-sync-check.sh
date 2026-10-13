@@ -15,6 +15,7 @@
 # Repos checked (fresh clones, --depth 1):
 #   pypto, simpler, pypto-lib  (hw-native-sys)
 #   pytorch-hccl-tests        (georgebisbas fork)
+#   pto-kernels               (huawei-csl)
 #
 # Toolchain truth comes from the freshly cloned pypto at its latest main:
 #   PTOAS       -> pypto/toolchain/versions.env
@@ -73,12 +74,14 @@ clone_recursive "$TMPDIR_CHECK/pypto" "https://github.com/hw-native-sys/pypto.gi
 clone "$TMPDIR_CHECK/simpler" "https://github.com/hw-native-sys/simpler.git"
 clone "$TMPDIR_CHECK/pypto-lib" "https://github.com/hw-native-sys/pypto-lib.git"
 clone "$TMPDIR_CHECK/pt-hccl" "https://github.com/georgebisbas/pytorch-hccl-tests.git"
+clone "$TMPDIR_CHECK/pto-kernels" "https://github.com/huawei-csl/pto-kernels.git"
 echo
 
 PYPTO_UP="$(git -C "$TMPDIR_CHECK/pypto" rev-parse HEAD)"
 SIMPLER_UP="$(git -C "$TMPDIR_CHECK/simpler" rev-parse HEAD)"
 PYPTO_LIB_UP="$(git -C "$TMPDIR_CHECK/pypto-lib" rev-parse HEAD)"
 PT_HCCL_UP="$(git -C "$TMPDIR_CHECK/pt-hccl" rev-parse HEAD)"
+PTO_KERNELS_UP="$(git -C "$TMPDIR_CHECK/pto-kernels" rev-parse HEAD)"
 
 # Toolchain truth from fresh pypto main.
 PTOAS_VERSION_UP="$(grep -E '^PTOAS_VERSION=' "$TMPDIR_CHECK/pypto/toolchain/versions.env" | cut -d= -f2)"
@@ -92,6 +95,7 @@ echo "pypto            ${PYPTO_UP:0:12}"
 echo "simpler          ${SIMPLER_UP:0:12}"
 echo "pypto-lib        ${PYPTO_LIB_UP:0:12}"
 echo "pytorch-hccl     ${PT_HCCL_UP:0:12}"
+echo "pto-kernels      ${PTO_KERNELS_UP:0:12}"
 echo "PTOAS            $PTOAS_VERSION_UP (aarch64 ${PTOAS_AARCH64_UP:0:12}, x86_64 ${PTOAS_X86_64_UP:0:12})"
 echo "pto-isa (pypto)  $PTO_ISA_PYPTO_UP"
 echo "pto-isa (simpler)$PTO_ISA_SIMPLER_UP"
@@ -121,6 +125,7 @@ check_pin SIMPLER_COMMIT  "$REPO_ROOT/Dockerfile.simpler.sim.ubuntu22.04"  "$SIM
 check_pin PYPTO_LIB_COMMIT "$REPO_ROOT/Dockerfile.pypto-lib.cann9.0"       "$PYPTO_LIB_UP"
 check_pin PYPTO_LIB_COMMIT "$REPO_ROOT/Dockerfile.pypto-lib.sim.ubuntu22.04" "$PYPTO_LIB_UP"
 check_pin PT_HCCL_COMMIT  "$REPO_ROOT/Dockerfile.pytorch-hccl-tests.cann9.0" "$PT_HCCL_UP"
+check_pin PTO_KERNELS_COMMIT "$REPO_ROOT/Dockerfile.pto-kernels.cann9.0"   "$PTO_KERNELS_UP"
 
 # server image: host-mounted, only PTOAS + pto-isa pinned (handled below).
 
