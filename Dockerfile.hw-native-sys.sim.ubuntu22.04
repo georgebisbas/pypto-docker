@@ -150,7 +150,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto with submodules so runtime/simpler sources are present. Private
 # forks should use Dockerfile.hw-native-sys.sim.local instead.
 ARG PYPTO_REPOSITORY=https://github.com/hw-native-sys/pypto.git
-ARG PYPTO_COMMIT=4a82915408eaf8aaf0e84dca4c1eab5e92eefed6
+ARG PYPTO_COMMIT=51ee349bbef36aff548438b912cb50f32c1004cb
 RUN git clone --filter=blob:none "${PYPTO_REPOSITORY}" "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -182,14 +182,14 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
     git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
 
 # Install ptoas x86_64 used by simulator CI jobs (wheel from GitHub Release).
-ARG PTOAS_VERSION=v0.65
-ARG PTOAS_WHEEL_SHA256=28ba50ddc684b3b011262cd26677a2509428beaf5e267cb6bee5b4c1f776712b
+ARG PTOAS_VERSION=v0.67
+ARG PTOAS_WHEEL_SHA256=846a3f80c7ae1555c50e95039642ee342bc6f99a50765ed27b3216478f98f12b
 RUN curl --fail --location --retry 3 --retry-all-errors \
-      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl" \
-      -o /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl && \
-    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
-    python3 -m pip install /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl && \
-    rm -f /tmp/ptoas-0.65-cp310-cp310-manylinux_2_34_x86_64.whl
+      "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/ptoas-0.67-cp310-cp310-manylinux_2_34_x86_64.whl" \
+      -o /tmp/ptoas-0.67-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    echo "${PTOAS_WHEEL_SHA256}  /tmp/ptoas-0.67-cp310-cp310-manylinux_2_34_x86_64.whl" | sha256sum -c - && \
+    python3 -m pip install /tmp/ptoas-0.67-cp310-cp310-manylinux_2_34_x86_64.whl && \
+    rm -f /tmp/ptoas-0.67-cp310-cp310-manylinux_2_34_x86_64.whl
 
 # PTO_ISA_ROOT is NO LONGER read by the pypto runtime to select the pto-isa
 # checkout (pypto PR #2410 deleted pypto's own resolver and delegates to
