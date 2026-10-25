@@ -33,8 +33,8 @@ case "${SCOPE}" in
       examples/workers/l3/ffn_tp_parallel
       examples/workers/l3/ep_dispatch_combine
       examples/workers/l3/child_memory
-      examples/workers/l3/l3_l2_message_queue
-      examples/workers/l3/l3_l2_orch_comm_stream
+      examples/workers/l3/worker_chip_message_queue
+      examples/workers/l3/worker_chip_orch_comm_stream
       examples/workers/l3/per_task_runtime_env
     )
     ;;
