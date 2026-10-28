@@ -17,8 +17,8 @@ PYTEST_COMMON=(
   --device 0-15
   -v
   --pto-session-timeout 600
-  --clone-protocol https
   --require-pto-isa
+  --manual include
 )
 
 case "${SCOPE}" in
