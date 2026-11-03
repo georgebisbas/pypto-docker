@@ -22,7 +22,7 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [Dockerfile.simpler.sim.ubuntu22.04](Dockerfile.simpler.sim.ubuntu22.04): Standalone simpler-only simulation image (`a2a3sim`/`a5sim`) for L3 worker STs without pypto or CANN.
 - [Dockerfile.pypto-lib.sim.ubuntu22.04](Dockerfile.pypto-lib.sim.ubuntu22.04): Thin layer on `pypto3-hw-native-sys:sim` with a baked `pypto-lib` checkout for example/model sim smoke tests.
 - [Dockerfile.pypto-lib.cann9.0](Dockerfile.pypto-lib.cann9.0): Thin layer on `pypto3-hw-native-sys:cann9` with a baked `pypto-lib` checkout for onboard NPU model runs.
-- [Dockerfile.pto-kernels.cann9.0](Dockerfile.pto-kernels.cann9.0): Standalone pto-kernels image (CANN 9.1.0 base; clones `huawei-csl/pto-kernels`) — CA-model simulation, kernel/wheel builds, and real-NPU pytest runs.
+- [Dockerfile.pto-kernels.cann9.0](Dockerfile.pto-kernels.cann9.0): Standalone pto-kernels image (CANN 9.2.0-beta.1 base; clones `huawei-csl/pto-kernels`) — CA-model simulation, kernel/wheel builds, and real-NPU pytest runs.
 - [docker-entrypoint-cann.sh](docker-entrypoint-cann.sh): Runtime helper for workspace/runtime symlink handling.
 - [TASK_QUEUE.md](TASK_QUEUE.md): **Working on a shared queue host** — join containers to the NPU card queue (`task-submit`), run tests/distributed jobs under it, pitfalls and troubleshooting.
 - [scripts/](scripts/): Image build scripts (`build-npu-images.sh`, `build-sim-images.sh`, `build-npu-dev-images.sh`, `fetch-pull-mains.sh`, `run-simpler-l3-sim.sh`) plus queue helpers (`attach-taskqueue.sh`, `queue-smoke.sh`).
@@ -38,7 +38,7 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [Dockerfile.simpler.sim.ubuntu22.04](Dockerfile.simpler.sim.ubuntu22.04): Build a standalone simpler-only simulation image for L3 worker/collective STs on `a2a3sim` without pypto or CANN.
 - [Dockerfile.pypto-lib.sim.ubuntu22.04](Dockerfile.pypto-lib.sim.ubuntu22.04): Build a pypto-lib sim image (extends `pypto3-hw-native-sys:sim`) for example/model smoke tests on `a2a3sim`/`a5sim`.
 - [Dockerfile.pypto-lib.cann9.0](Dockerfile.pypto-lib.cann9.0): Build a pypto-lib NPU image (extends `pypto3-hw-native-sys:cann9`) for onboard model runs on Ascend 910B.
-- [Dockerfile.pto-kernels.cann9.0](Dockerfile.pto-kernels.cann9.0): Build a pto-kernels image from the official CANN base (9.1.0, as its `.gitlab-ci.yml` uses). pto-kernels' simulator is the CANN CA model (`msprof`/`cannsim`/`linked`), so one image serves both NPU-free simulation and onboard runs; the compiled `pto_kernels` wheel is pre-installed, and the tests' kernels are traced under `msprof op simulator`. The `tests/` suite still requires either that simulator wrapper or a real NPU — a plain `python3 -m pytest` has no device (its conftest binds `torch.npu` at import).
+- [Dockerfile.pto-kernels.cann9.0](Dockerfile.pto-kernels.cann9.0): Build a pto-kernels image from the official CANN base (9.2.0-beta.1, as its `.gitlab-ci.yml` uses). pto-kernels' simulator is the CANN CA model (`msprof`/`cannsim`/`linked`), so one image serves both NPU-free simulation and onboard runs; the compiled `pto_kernels` wheel is pre-installed, and the tests' kernels are traced under `msprof op simulator`. The `tests/` suite still requires either that simulator wrapper or a real NPU — a plain `python3 -m pytest` has no device (its conftest binds `torch.npu` at import).
 - [docker-entrypoint-cann.sh](docker-entrypoint-cann.sh): Runtime helper script that normalizes runtime layout (workspace/runtime symlink behavior) before launching the container command.
 - [TASK_QUEUE.md](TASK_QUEUE.md): Verified instructions for running these containers on the shared NPU hosts (`task-submit` queue): what to change vs. the recipes above, queue-joined container setup, test/distributed commands, one-shot host runs, and pitfalls (incl. the libhccl preload trap).
 
@@ -75,8 +75,8 @@ Build standalone hw-native-sys image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg PYPTO_COMMIT=f32ecf3f05d23a83a52283ad7998ca59cd8d291d \
-  --build-arg PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702 \
+  --build-arg PYPTO_COMMIT=950a30ec9a0f81b4f9d42fde778ac2ca9e2c82bc \
+  --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t pypto3-hw-native-sys:cann9 \
   - < Dockerfile.hw-native-sys.cann9.0
 ```
@@ -97,8 +97,8 @@ Build standalone simpler image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=74ddf236d776d0b9194ed8ca4d3fa4d3bb102587 \
-  --build-arg PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702 \
+  --build-arg SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43 \
+  --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t simpler-cann9 \
   - < Dockerfile.simpler.cann9.0
 ```
@@ -127,7 +127,7 @@ docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu2
 Build standalone local simulation image (pinned commits):
 
 ```bash
-docker build --build-arg PYPTO_COMMIT=f32ecf3f05d23a83a52283ad7998ca59cd8d291d --build-arg PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+docker build --build-arg PYPTO_COMMIT=950a30ec9a0f81b4f9d42fde778ac2ca9e2c82bc --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 ```
 
 Build standalone simpler simulation image (no NPU, no pypto):
@@ -140,8 +140,8 @@ Build standalone simpler simulation image (pinned commits):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=74ddf236d776d0b9194ed8ca4d3fa4d3bb102587 \
-  --build-arg PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702 \
+  --build-arg SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43 \
+  --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t simpler-hw-native-sys:sim \
   -f Dockerfile.simpler.sim.ubuntu22.04 .
 ```
@@ -157,7 +157,7 @@ Build pypto-lib simulation image (pinned pypto-lib commit):
 
 ```bash
 docker build \
-  --build-arg PYPTO_LIB_COMMIT=eed3280972f6743fc46d68219bcb108596e64578 \
+  --build-arg PYPTO_LIB_COMMIT=420bc107942f94626dc1405172a20eeff70e176f \
   -t pypto-lib-hw-native-sys:sim \
   -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```
@@ -259,7 +259,9 @@ pytest tests/st -v --forked --platform=a2a3sim,a5sim
 Optional CI-aligned simulator subset:
 
 ```bash
-pytest tests/st/runtime/ops/test_assemble.py tests/st/runtime/ops/test_mscatter.py tests/st/runtime/framework_and_models/test_qwen3_decode_scope3_mixed.py tests/st/runtime/control_flow/test_dyn_orch_shape.py::TestDynOrchShapeOperations::test_dyn_orch_paged_attention -v --platform=a5sim --forked -k "not TestMscatter"
+pytest tests/st/runtime/ops/test_assemble.py tests/st/runtime/ops/test_gather.py tests/st/runtime/ops/test_gatherb.py tests/st/runtime/ops/test_mscatter.py tests/st/runtime/ops/test_prelu.py tests/st/runtime/ops/test_random.py tests/st/runtime/ops/test_sels.py tests/st/runtime/ops/test_tri.py tests/st/runtime/framework_and_models/test_qwen3_decode_scope3_mixed.py tests/st/runtime/control_flow/test_dyn_orch_shape.py::TestDynOrchShapeOperations::test_dyn_orch_paged_attention -v --platform=a5sim --forked -k "not TestMscatter"
+pytest tests/ut/codegen/test_ptoas_planner_views.py -v -k "tcvt_"
+pytest tests/st/runtime/ops/test_cast_saturation.py -v --forked --platform=a2a3sim
 pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a5sim
 pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a2a3sim
 ```

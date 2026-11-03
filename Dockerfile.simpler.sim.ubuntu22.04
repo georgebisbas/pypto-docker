@@ -14,8 +14,8 @@
 #
 # BUILD (pinned commits):
 #   docker build \
-#     --build-arg SIMPLER_COMMIT=74ddf236d776d0b9194ed8ca4d3fa4d3bb102587 \
-#     --build-arg PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702 \
+#     --build-arg SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43 \
+#     --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
 #     -t simpler-hw-native-sys:sim \
 #     -f Dockerfile.simpler.sim.ubuntu22.04 .
 #
@@ -27,12 +27,17 @@
 #   python -c "import simpler; print('simpler ok')"
 #   pytest tests/ut -m "not requires_hardware" -v --clone-protocol https
 #
-# L3 DISTRIBUTED / COLLECTIVE STs (a2a3sim — same flags as simpler ci.yml st-sim-a2a3):
+# SIM STs (mirrors simpler CI _st-sim-a2a3.yml — build target build_package_sim):
+#   cd /opt/simpler
+#   pytest examples tests/st \
+#     --platform a2a3sim --device 0-15 -v \
+#     --pto-session-timeout 600 --require-pto-isa --manual include
+#
+# L3 DISTRIBUTED / COLLECTIVE examples (subset; same flags):
 #   cd /opt/simpler
 #   pytest examples/workers/l3/allreduce \
 #     --platform a2a3sim --device 0-15 -v \
-#     --pto-session-timeout 600 \
-#     --clone-protocol https --require-pto-isa
+#     --pto-session-timeout 600 --require-pto-isa --manual include
 #
 # Or use the helper script:
 #   /opt/pypto-tooling/scripts/run-simpler-l3-sim.sh distributed
@@ -100,19 +105,20 @@ RUN if [ "${INSTALL_CLAUDE}" = "1" ]; then \
 # Keep the image reproducible; rebuild with a new CLAUDE_VERSION to upgrade.
 ENV DISABLE_AUTOUPDATER=1
 
-# nanobind capped below 3, mirroring simpler's pyproject [build-system] / CI.
+# nanobind capped below 3 and cmake floored at 3.20, mirroring simpler's
+# pyproject [build-system] / CI.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel && \
     pip install \
       "scikit-build-core>=0.10.0" "nanobind>=2.0.0,<3" \
-      "ninja>=1.11.0" "cmake>=3.15" && \
+      "ninja>=1.11.0" "cmake>=3.20" && \
     pip install \
       "numpy>=2.0" \
       "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" && \
     pip install \
       torch --index-url https://download.pytorch.org/whl/cpu
 
-ARG SIMPLER_COMMIT=74ddf236d776d0b9194ed8ca4d3fa4d3bb102587
+ARG SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43
 
 # Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
@@ -144,16 +150,26 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
-# Match simpler CI st-sim-a2a3: pip install '.[test]' (no SIMPLER_PTO_ISA_COMMIT cmake pin for sim).
+# Match simpler CI's sim jobs: build the sim runtimes explicitly
+# (build_package_sim covers both a2a3sim and a5sim, which is what this
+# dual-platform image needs) with the '[test]' extra, no PTO_ISA cmake pin.
 RUN --mount=type=cache,target=/root/.cache/pip \
     rm -rf ./build && \
-    pip install --no-build-isolation '.[test]'
+    pip install --no-build-isolation --config-settings=build.targets=build_package_sim '.[test]'
 
 # Helper script for L3 sim pytest (optional; copy from build context when present).
 ARG TOOLING_DIR=${INSTALL_PREFIX}/pypto-tooling
 RUN mkdir -p "${TOOLING_DIR}/scripts"
 COPY scripts/run-simpler-l3-sim.sh "${TOOLING_DIR}/scripts/run-simpler-l3-sim.sh"
 RUN chmod +x "${TOOLING_DIR}/scripts/run-simpler-l3-sim.sh"
+
+# Ubuntu's libpython3.10-minimal ships an apport-hook sitecustomize.py in the
+# stdlib dir. Because that dir precedes a venv's site-packages on sys.path, it
+# shadows the venv's own sitecustomize.py and breaks venv startup-dependency
+# tests. Apport is irrelevant in a container, and CI's Python has no such hook
+# — drop it to match CI. Kept last so a cache hit on the heavy build layers
+# survives.
+RUN rm -f /usr/lib/python3.10/sitecustomize.py
 
 WORKDIR ${SIMPLER_DIR}
 CMD ["bash"]

@@ -8,8 +8,8 @@
 # All paths are driven by build args:
 #   CANN_VERSION    (default: 9.0.0)  — selects base image tag and all cann-* paths
 #   INSTALL_PREFIX  (default: /opt)   — root for simpler and pto-isa installs
-#   SIMPLER_COMMIT  (default: 74ddf236d776d0b9194ed8ca4d3fa4d3bb102587) — simpler commit to build from; changing it busts cache
-#   PTO_ISA_COMMIT  (default: 217bb98952a8f9004b95fe938da97d8d5f68f702) — pto-isa commit from simpler's pto_isa.pin at the pinned simpler commit
+#   SIMPLER_COMMIT  (default: 142ee15a7fa46925b9802984fa1ac75676e87d43) — simpler commit to build from; changing it busts cache
+#   PTO_ISA_COMMIT  (default: f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7) — pto-isa commit from simpler's pto_isa.pin at the pinned simpler commit
 #
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
@@ -25,7 +25,7 @@
 #   docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # BUILD (pinned simpler + pinned pto-isa):
-#   docker build --build-arg SIMPLER_COMMIT=74ddf236d776d0b9194ed8ca4d3fa4d3bb102587 --build-arg PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
+#   docker build --build-arg SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43 --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # RUN (single-device):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
@@ -40,12 +40,20 @@
 # COMMON COMMANDS INSIDE CONTAINER (copy-paste; defaults: INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0):
 #
 #   cd /opt/simpler
-#   pip install --no-build-isolation .
-#   python -m pytest tests/ut -m "not requires_hardware" -v --clone-protocol https
-#   python -m pytest tests -m requires_hardware --platform a2a3 --device 0,1,2,3 -v --ignore=tests/ut/py/test_worker/test_platform_comm.py
-#   python -m pytest tests/st -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
+#   # Rebuild with the a2a3 target, as simpler CI's a2a3 jobs do:
+#   pip install --no-build-isolation --config-settings=build.targets=build_package_a2a3 .
+#   # No-hardware UTs (CI job ut-no-hardware):
+#   python -m pytest tests/ut -m "not requires_hardware" -v
+#   # Hardware UTs (CI job ut-a2a3):
+#   python -m pytest tests/ut -m "requires_hardware and device_count" --platform a2a3 --device 0,1,2,3 -v
+#   python -m pytest tests/ut -m "requires_hardware and not device_count" -k TestRuntimeBuilderIntegration --platform a2a3 --device 0,1,2,3 -v
+#   python -m pytest tests/ut -m "requires_hardware and not device_count" -k 'not TestRuntimeBuilderIntegration' --platform a2a3 --device 0,1,2,3 -n 4 -v
+#   # Onboard scene tests (CI job st-onboard-a2a3):
+#   python -m pytest examples tests/st -m 'not sdma and not sdma_fault' --platform a2a3 --exclude-level 4 --device 0,1,2,3 -v --require-pto-isa --pto-session-timeout 1200 --manual include
+#   python -m pytest examples tests/st -m 'sdma and not sdma_fault' --platform a2a3 --device 0,1 -v --require-pto-isa --pto-session-timeout 600
+#   python -m pytest examples tests/st -m sdma_fault --platform a2a3 --device 0 -v --require-pto-isa --pto-session-timeout 600
+#   # HCCL cases need libhccl preloaded (not set image-wide — see below):
 #   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
-#   python -m pytest tests/ut/py/test_worker/test_platform_comm.py -m requires_hardware --platform a2a3 --device 0,1,2,3 -v
 #   python examples/workers/l3/allreduce/main.py -p a2a3 -d 0-1
 #   python examples/workers/l3/ep_dispatch_combine/main.py -p a2a3 -d 0-1
 #   python examples/workers/l3/ffn_tp_parallel/main.py -p a2a3 -d 0-1
@@ -90,7 +98,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ENV CC=gcc-15 \
     CXX=g++-15
 
-ARG SIMPLER_COMMIT=74ddf236d776d0b9194ed8ca4d3fa4d3bb102587
+ARG SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43
 
 # Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
@@ -98,8 +106,8 @@ RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "$
 
 WORKDIR ${SIMPLER_DIR}
 
-# PTO_ISA_COMMIT defaults to 217bb98952a8f9004b95fe938da97d8d5f68f702 — from simpler's pto_isa.pin at the pinned simpler commit.
-ARG PTO_ISA_COMMIT=217bb98952a8f9004b95fe938da97d8d5f68f702
+# PTO_ISA_COMMIT defaults to f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 — from simpler's pto_isa.pin at the pinned simpler commit.
+ARG PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7
 
 # Auto-derive PTO_ISA_COMMIT from simpler's pto_isa.pin (the single source of
 # truth; simpler CI reads it via .github/actions/read-pto-isa).
@@ -117,16 +125,16 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
 
 ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 
-# Python build toolchain. nanobind is capped below 3, mirroring simpler's
-# pyproject [build-system] and CI: nanobind 3.x requires Python >= 3.10 in its
-# nanobind-config.cmake while simpler supports >= 3.9.
+# Python build toolchain. nanobind is capped below 3 and cmake floored at 3.20,
+# mirroring simpler's pyproject [build-system] and CI: nanobind 3.x requires
+# Python >= 3.10 in its nanobind-config.cmake while simpler supports >= 3.9.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m pip install --upgrade pip setuptools wheel && \
     pip install \
       "scikit-build-core>=0.10.0" \
       "nanobind>=2.0.0,<3" \
       "ninja>=1.11.0" \
-      "cmake>=3.15"
+      "cmake>=3.20"
 
 # Runtime / test dependencies.
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -137,10 +145,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# Build and install simpler C++ extension.
+# Build and install the simpler C++ extension. Select the a2a3 target
+# explicitly, mirroring simpler CI's onboard a2a3 jobs (build_package_a2a3)
+# instead of building every platform runtime into a 910B-only image.
 RUN --mount=type=cache,target=/root/.cache/pip \
     rm -rf ./build && \
-    pip install --no-build-isolation .
+    pip install --no-build-isolation --config-settings=build.targets=build_package_a2a3 .
 
 # Remove set_env.sh auto-sourcing from ALL system/user startup files.
 # The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.

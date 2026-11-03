@@ -12,7 +12,7 @@
 #
 # BUILD (pinned pypto-lib commit):
 #   docker build \
-#     --build-arg PYPTO_LIB_COMMIT=eed3280972f6743fc46d68219bcb108596e64578 \
+#     --build-arg PYPTO_LIB_COMMIT=420bc107942f94626dc1405172a20eeff70e176f \
 #     -t pypto-lib-hw-native-sys:cann9 \
 #     - < Dockerfile.pypto-lib.cann9.0
 #
@@ -38,6 +38,7 @@
 #   npu-smi info
 #   python examples/beginner/hello_world.py -p a2a3 -d 0
 #   python examples/advanced/allreduce.py -p a2a3 -d 0,1
+#   pytest tests -v                     # pypto-lib CI unit-tests job
 #
 # HCCL collectives (multi-card examples):
 #   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so

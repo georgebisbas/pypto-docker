@@ -89,6 +89,11 @@ PTOAS_AARCH64_UP="$(grep -E '^PTOAS_SHA256_AARCH64=' "$TMPDIR_CHECK/pypto/toolch
 PTOAS_X86_64_UP="$(grep -E '^PTOAS_SHA256_X86_64=' "$TMPDIR_CHECK/pypto/toolchain/versions.env" | cut -d= -f2)"
 PTO_ISA_PYPTO_UP="$(tr -d '[:space:]' < "$TMPDIR_CHECK/pypto/runtime/pto_isa.pin")"
 PTO_ISA_SIMPLER_UP="$(tr -d '[:space:]' < "$TMPDIR_CHECK/simpler/pto_isa.pin")"
+# pto-kernels CI pins the CANN base tag in .gitlab-ci.yml (9.2.0-beta.1-...).
+PTO_KERNELS_CANN_UP="$(grep -oP 'quay\.io/ascend/cann:\K[0-9.]+(?:-beta\.[0-9]+)?' \
+  "$TMPDIR_CHECK/pto-kernels/.gitlab-ci.yml" | head -1 || true)"
+# simpler's pyproject [build-system] floors cmake (mirrored by its images).
+SIMPLER_CMAKE_UP="$(grep -oP '"cmake>=\K[0-9.]+' "$TMPDIR_CHECK/simpler/pyproject.toml" | head -1 || true)"
 
 info "=== Upstream latest ==="
 echo "pypto            ${PYPTO_UP:0:12}"
@@ -99,6 +104,8 @@ echo "pto-kernels      ${PTO_KERNELS_UP:0:12}"
 echo "PTOAS            $PTOAS_VERSION_UP (aarch64 ${PTOAS_AARCH64_UP:0:12}, x86_64 ${PTOAS_X86_64_UP:0:12})"
 echo "pto-isa (pypto)  $PTO_ISA_PYPTO_UP"
 echo "pto-isa (simpler)$PTO_ISA_SIMPLER_UP"
+echo "CANN (pto-kern)  $PTO_KERNELS_CANN_UP"
+echo "cmake (simpler)  >=$SIMPLER_CMAKE_UP"
 echo
 
 # ---------------------------------------------------------------------------
@@ -215,10 +222,14 @@ check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.simpler.sim.ubuntu22.04" "$PTO_I
 CONSTRAINTS_UP="$TMPDIR_CHECK/pypto/build-constraints.txt"
 PY_IMAGES=(Dockerfile.hw-native-sys.cann9.0 Dockerfile.hw-native-sys.sim.ubuntu22.04 "Dockerfile.server.cann:9.0")
 if [[ -f "$CONSTRAINTS_UP" ]]; then
-  for pkg in cmake nanobind ninja scikit-build-core; do
-    want="$(grep -oP "^${pkg}==\K[0-9A-Za-z.]+" "$CONSTRAINTS_UP" | head -1 || true)"
+  # Check EVERY pinned input in build-constraints.txt — not just the build
+  # toolchain: CI also pins pytest/pytest-forked there (the --forked pair).
+  while IFS= read -r line; do
+    pkg="${line%%==*}"
+    want="${line#*==}"
+    [[ -z "$pkg" ]] && continue
     if [[ -z "$want" ]]; then
-      warn "  SKIP build input $pkg — not pinned in pypto build-constraints.txt"
+      warn "  SKIP build input $pkg — not an exact pin in pypto build-constraints.txt"
       continue
     fi
     for f in "${PY_IMAGES[@]}"; do
@@ -229,7 +240,7 @@ if [[ -f "$CONSTRAINTS_UP" ]]; then
         DRIFT=1
       fi
     done
-  done
+  done < <(grep -E '^[A-Za-z0-9_.-]+==' "$CONSTRAINTS_UP")
 else
   warn "  SKIP build-input pins — pypto/build-constraints.txt not found"
 fi
@@ -262,6 +273,34 @@ if [[ -n "$SIMPLER_NB_UP" ]]; then
   done
 else
   warn "  SKIP simpler nanobind cap — not found in simpler/pyproject.toml"
+fi
+
+# simpler's build-system cmake floor (3.20) is mirrored by both simpler images.
+if [[ -n "$SIMPLER_CMAKE_UP" ]]; then
+  for f in Dockerfile.simpler.cann9.0 Dockerfile.simpler.sim.ubuntu22.04; do
+    if grep -qF "\"cmake>=${SIMPLER_CMAKE_UP}\"" "$REPO_ROOT/$f"; then
+      ok "  OK   cmake>=${SIMPLER_CMAKE_UP} in $f"
+    else
+      err "  DRIFT cmake in $f: expected \"cmake>=${SIMPLER_CMAKE_UP}\" (simpler pyproject.toml)"
+      DRIFT=1
+    fi
+  done
+else
+  warn "  SKIP simpler cmake floor — not found in simpler/pyproject.toml"
+fi
+
+# pto-kernels' CANN base follows its .gitlab-ci.yml, not pypto's 9.0.0 pin.
+if [[ -n "$PTO_KERNELS_CANN_UP" ]]; then
+  PTO_KERNELS_CANN_CUR="$(grep -oP '^ARG CANN_VERSION=\K.*' \
+    "$REPO_ROOT/Dockerfile.pto-kernels.cann9.0" | head -1 || true)"
+  if [[ "$PTO_KERNELS_CANN_CUR" == "$PTO_KERNELS_CANN_UP" ]]; then
+    ok "  OK   CANN_VERSION in Dockerfile.pto-kernels.cann9.0 ($PTO_KERNELS_CANN_UP)"
+  else
+    err "  DRIFT CANN_VERSION in Dockerfile.pto-kernels.cann9.0: pinned ${PTO_KERNELS_CANN_CUR:-<none>}, .gitlab-ci.yml ${PTO_KERNELS_CANN_UP}"
+    DRIFT=1
+  fi
+else
+  warn "  SKIP pto-kernels CANN version — not found in its .gitlab-ci.yml"
 fi
 
 # ---------------------------------------------------------------------------

@@ -55,7 +55,7 @@ Task starts
 | `Dockerfile.hw-native-sys.dev.cann9.0`, `Dockerfile.simpler.dev.cann9.0` | Personal dev layer (git identity, fork remote, editable install) on the cann9 images | `docker build -t img -f Dockerfile... .` | Yes (a2a3) |
 | `Dockerfile.hw-native-sys.sim.local`, `...sim.local-overlay` | Local overlays on a sim image for a private pypto checkout (no pins) | see file headers | No |
 
-All use `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12` as base image, **except** `Dockerfile.pto-kernels.cann9.0`, which uses CANN **9.1.0** (its kernel sources need headers the 9.0.0 toolchain lacks).
+All use `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12` as base image, **except** `Dockerfile.pto-kernels.cann9.0`, which follows pto-kernels' `.gitlab-ci.yml` and currently uses CANN **9.2.0-beta.1** (its kernel sources need headers the 9.0.0 toolchain lacks).
 
 ## When to update Dockerfiles
 
@@ -68,8 +68,8 @@ Each Dockerfile pins specific external versions. When asked to update one, run t
 | 1 | pypto `origin/main` ahead of `PYPTO_COMMIT`? | `git -C /path/to/pypto rev-list --count ${PYPTO_COMMIT}..origin/main` | `ARG PYPTO_COMMIT` + header comment example |
 | 2 | pto-isa commit changed? | Read `pypto/runtime/pto_isa.pin` — the single source of truth (auto-derived at Docker build time). | Auto-derived; no ARG update needed unless you want to hard-pin via `--build-arg` |
 | 3 | PTOAS version or SHA256 changed? | Read `pypto/toolchain/versions.env` **at the commit you are pinning** — this is the **single source of truth** for PTOAS_VERSION and PTOAS_SHA256_{AARCH64,X86_64} (bumped via PRs like [#1921](https://github.com/hw-native-sys/pypto/pull/1921)). Do NOT grep `.github/workflows/ci.yml` for PTOAS. | `ARG PTOAS_VERSION` + `ARG PTOAS_SHA256` (aarch64 for cann/server, x86_64 for sim) |
-| 4 | build inputs / torch pin changed in pypto CI? | Build inputs are **pinned exact** to `pypto/build-constraints.txt` (CI's validated set — added after nanobind 3.0.0 broke every branch, #2492/#2495); torch is pinned to `setup-ci-job`'s `TORCH_PIN` (unpinned 2.13 breaks the bf16 codegen golden compare). `scripts/dockerfile-sync-check.sh` verifies all five. Remaining deps: `diff <(grep 'pip install' pypto/.github/docker/github_ci.Dockerfile) <(grep 'pip install' Dockerfile.hw-native-sys.cann9.0)` | Update the pinned versions — never relax them back to `>=` |
-| 5 | Test commands in header comment match pypto CI? | Compare `.github/workflows/ci.yml` jobs with Dockerfile comment header | Update test command cheatsheet in header comment |
+| 4 | build inputs / torch pin changed in pypto CI? | Build inputs are **pinned exact** to `pypto/build-constraints.txt` (CI's validated set — added after nanobind 3.0.0 broke every branch, #2492/#2495; it also pins the `--forked`-compatible `pytest`/`pytest-forked` pair, #3204); torch is pinned to `setup-ci-job`'s `TORCH_PIN` (unpinned 2.13 breaks the bf16 codegen golden compare). `scripts/dockerfile-sync-check.sh` verifies **every** exact pin in the constraints file. Remaining deps: `diff <(grep 'pip install' pypto/.github/docker/github_ci.Dockerfile) <(grep 'pip install' Dockerfile.hw-native-sys.cann9.0)` | Update the pinned versions — never relax them back to `>=` |
+| 5 | Test commands in header comment match pypto CI? | Compare `.github/workflows/ci.yml` jobs with Dockerfile comment header. Note the current split: `system-tests`/`system-tests-direct` shards, `--enable-chip-swimlane` (not `--enable-l2-swimlane`), and `--dump-args` (not `--dump-tensor`) | Update test command cheatsheet in header comment |
 | 6 | `3rdparty` fallback clones match `pypto/.gitmodules`? | `git -C /path/to/pypto show origin/main:.gitmodules` vs the fallback `git clone` URLs/branches in the Dockerfile | Update the fallback URL/branch — see "Third-party fallback" pattern |
 
 **PTOAS versions are not monotonic.** `versions.env` can move *backwards*: pypto bumped to v0.50 (#2076) then reverted to v0.48 (#2138) because that ptoas build was buggy. Always take the version from `versions.env` at the pypto commit you pin — never carry forward a higher number just because you set it last time, and never bump ahead of `versions.env` even when newer PTOAS releases exist.
@@ -104,7 +104,8 @@ The wheel's C++ extensions require **`GLIBCXX_3.4.29`** (`strings ptoas/_core*.s
 | 2 | pto-isa commit changed? | Read `simpler/pto_isa.pin` — the single source of truth (auto-derived at Docker build time). | Auto-derived; no ARG update needed unless you want to hard-pin via `--build-arg` |
 | 3 | `ENV LD_PRELOAD` absent? | `grep LD_PRELOAD Dockerfile.simpler.cann9.0` — should be comments only | Remove image-wide `ENV LD_PRELOAD` |
 | 4 | `set_env.sh` stripped, not re-added to bashrc? | `grep set_env Dockerfile.simpler.cann9.0` — strip `RUN` only, no bashrc append | Align with hw-native-sys pattern |
-| 5 | Build-input floor changed in simpler's pyproject? | `grep -oP '"nanobind\K[^"]+' simpler/pyproject.toml` vs the `nanobind` line (also checked by `scripts/dockerfile-sync-check.sh`) | Mirror the cap — currently `nanobind>=2.0.0,<3`: 3.x requires Python >= 3.10 in its cmake, simpler supports >= 3.9 |
+| 5 | Build-input floor changed in simpler's pyproject? | `grep -oP '"nanobind\K[^"]+' simpler/pyproject.toml` vs the `nanobind` line; same for `cmake>=` (both checked by `scripts/dockerfile-sync-check.sh`) | Mirror them — currently `nanobind>=2.0.0,<3`: 3.x requires Python >= 3.10 in its cmake, simpler supports >= 3.9; and `cmake>=3.20` |
+| 6 | Simpler build target matches CI? | CI's sim jobs pass `--config-settings=build.targets=build_package_{a2a3sim,a5sim,sim}`; the onboard a2a3 jobs use `build_package_a2a3` | Mirror the target (the sim image uses `build_package_sim` for both simulators; the onboard image uses `build_package_a2a3`) |
 
 Note: No PTOAS or pypto dependencies — simpler-only image.
 
@@ -186,7 +187,7 @@ Note: pypto + simpler are mounted from host at runtime, not pinned in the Docker
 | # | Check | Command | What to update if drifted |
 |---|-------|---------|--------------------------|
 | 1 | pto-kernels `main` ahead of `PTO_KERNELS_COMMIT`? | `git ls-remote https://github.com/huawei-csl/pto-kernels.git HEAD` (also checked by `scripts/dockerfile-sync-check.sh`) | `ARG PTO_KERNELS_COMMIT` + header comment default |
-| 2 | CANN base still what pto-kernels CI uses? | Read `.gitlab-ci.yml` in pto-kernels at the pinned commit | `ARG CANN_VERSION` + header comment |
+| 2 | CANN base still what pto-kernels CI uses? | Read `.gitlab-ci.yml` in pto-kernels at the pinned commit (currently `9.2.0-beta.1-910b-ubuntu22.04-py3.12`; also checked by `scripts/dockerfile-sync-check.sh`) | `ARG CANN_VERSION` + header comment |
 | 3 | Build workarounds still needed? | See header: PyTorch CPU index for `torch==2.10.0+cpu`; devlib **appended** (never prepended) to `LD_LIBRARY_PATH` | Remove only after verifying the build/import still succeeds |
 
 ### Quick bulk check (all Dockerfiles)
@@ -283,7 +284,7 @@ ENV PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/.../opp/...
 [ ] 2. Clone pto-isa (needed by simpler kernel compilation)
 [ ] 3. Install PTOAS cp310 wheel into a python3.10 venv (needed by pypto tests; NOT needed by simpler-only)
 [ ] 4. pip install scikit-build-core nanobind cmake ninja
-[ ] 5. pip install numpy pytest torch (CPU, unversioned — matches CI)
+[ ] 5. pip install numpy, pinned pytest/pytest-forked (build-constraints.txt), pin torch to CI's TORCH_PIN
 [ ] 6. pip install --no-build-isolation ./runtime   ← simpler MUST be built before pypto
 [ ] 7. pip install --no-build-isolation .[dev]       ← depends on simpler.task_interface
 ```

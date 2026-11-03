@@ -46,11 +46,17 @@
 #   - INFO_V9 scheduler/swimlane logs are expected in sim mode (timing + tasks_scheduled summaries)
 #   - non-fatal deprecation warnings may appear; run is still considered successful if process exits 0
 #
-# CI-LIKE SIMULATION MATRIX (copy/paste one-liners):
+# CI-LIKE SIMULATION MATRIX (copy/paste one-liners, mirrors ci.yml jobs):
 #   cd /opt/pypto && pytest tests/ut -n auto --maxprocesses 8 -v
-#   cd /opt/pypto && pytest tests/st/codegen -v --codegen-only --ignore=tests/st/codegen/torch/test_torch_codegen_paged_attention.py
-#   cd /opt/pypto && python tests/lint/clang_tidy.py --jobs=$(nproc)
-#   cd /opt/pypto && pytest tests/st/runtime/ops/test_assemble.py tests/st/runtime/ops/test_mscatter.py tests/st/runtime/framework_and_models/test_qwen3_decode_scope3_mixed.py tests/st/runtime/control_flow/test_dyn_orch_shape.py::TestDynOrchShapeOperations::test_dyn_orch_paged_attention -v --platform=a5sim --forked -k "not TestMscatter"
+#   cd /opt/pypto && python -m pytest tests/st/codegen -v --codegen-only --ignore=tests/st/codegen/torch/test_torch_codegen_paged_attention.py
+#   cd /opt/pypto && python tests/lint/clang_tidy.py --strict-version --jobs=$(nproc)
+#   # system-tests-a5sim (job):
+#   cd /opt/pypto && python -m pytest tests/ut/codegen/ --require-ptoas -m ptoas_compile -v
+#   cd /opt/pypto && python -m pytest tests/ut/runtime/test_cpu_sim_target.py -v
+#   cd /opt/pypto && python -m pytest tests/st/runtime/ops/test_fillpad_inplace.py --memory-planner=ptoas --platform=a2a3sim,a5sim --forked -v
+#   cd /opt/pypto && pytest tests/st/runtime/ops/test_assemble.py tests/st/runtime/ops/test_gather.py tests/st/runtime/ops/test_gatherb.py tests/st/runtime/ops/test_mscatter.py tests/st/runtime/ops/test_prelu.py tests/st/runtime/ops/test_random.py tests/st/runtime/ops/test_sels.py tests/st/runtime/ops/test_tri.py tests/st/runtime/framework_and_models/test_qwen3_decode_scope3_mixed.py tests/st/runtime/control_flow/test_dyn_orch_shape.py::TestDynOrchShapeOperations::test_dyn_orch_paged_attention -v --platform=a5sim --forked -k "not TestMscatter"
+#   cd /opt/pypto && pytest tests/ut/codegen/test_ptoas_planner_views.py -v -k "tcvt_"
+#   cd /opt/pypto && pytest tests/st/runtime/ops/test_cast_saturation.py -v --forked --platform=a2a3sim
 #   cd /opt/pypto && pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a5sim
 #   cd /opt/pypto && pytest tests/st/runtime/cross_core/test_cross_core.py -v --forked --platform=a2a3sim
 #   cd /opt/pypto && pytest tests/st -v --forked --platform=a2a3sim,a5sim
@@ -133,7 +139,8 @@ RUN if [ "${INSTALL_CLAUDE}" = "1" ]; then \
 # Keep the image reproducible; rebuild with a new CLAUDE_VERSION to upgrade.
 ENV DISABLE_AUTOUPDATER=1
 
-# Build inputs pinned to pypto's build-constraints.txt; torch to CI's TORCH_PIN.
+# Build inputs (and the --forked-compatible pytest pair) pinned to pypto's
+# build-constraints.txt; torch to CI's TORCH_PIN.
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel && \
     pip install \
@@ -141,7 +148,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
       "ninja==1.13.0" "cmake==4.4.2" && \
     pip install \
       "numpy>=2.0" \
-      "pytest>=7.0.0" "pytest-forked>=1.0" "pytest-xdist==3.8.0" \
+      "pytest==9.1.1" "pytest-forked==1.7.5" "pytest-xdist==3.8.0" \
       "pyright==1.1.407" "ruff==0.14.8" "clang-tidy==21.1.0" \
       "pre-commit==4.5.1" && \
     pip install \
@@ -150,7 +157,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto with submodules so runtime/simpler sources are present. Private
 # forks should use Dockerfile.hw-native-sys.sim.local instead.
 ARG PYPTO_REPOSITORY=https://github.com/hw-native-sys/pypto.git
-ARG PYPTO_COMMIT=f32ecf3f05d23a83a52283ad7998ca59cd8d291d
+ARG PYPTO_COMMIT=950a30ec9a0f81b4f9d42fde778ac2ca9e2c82bc
 RUN git clone --filter=blob:none "${PYPTO_REPOSITORY}" "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -207,5 +214,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     rm -rf ./runtime/build && \
     pip install --no-build-isolation -v ./runtime && \
     pip install --no-build-isolation -v ".[dev]"
+
+# Ubuntu's libpython3.10-minimal ships an apport-hook sitecustomize.py in the
+# stdlib dir. Because that dir precedes a venv's site-packages on sys.path, it
+# shadows the venv's own sitecustomize.py and breaks venv startup-dependency
+# tests (pypto tests/ut/jit/test_build_identity.py). Apport is irrelevant in a
+# container, and CI's Python has no such hook — drop it to match CI. Kept last
+# so a cache hit on the heavy compile layers survives.
+RUN rm -f /usr/lib/python3.10/sitecustomize.py
 
 CMD ["bash"]

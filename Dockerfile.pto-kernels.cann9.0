@@ -13,14 +13,14 @@
 # NPU-free simulation and (with device mounts) real-device runs.
 #
 # Build args:
-#   CANN_VERSION        (default: 9.1.0) — selects the quay base tag and the
-#                       /usr/local/Ascend/cann-* home. 9.1.0 is what the repo's
-#                       .gitlab-ci.yml uses and what the kernel sources need:
-#                       kernel_flash_attention.cpp instantiates the 7-argument
-#                       TPipe<> form, which the 9.0.0 headers do not have, so
-#                       the wheel build fails on 9.0.0 (the standalone
-#                       reference kernels still build there).
-#   PTO_KERNELS_COMMIT  (default: a15f2d2911a451c2d8303f3594517d4191e67b6a)
+#   CANN_VERSION        (default: 9.2.0-beta.1) — selects the quay base tag and
+#                       the /usr/local/Ascend/cann-* home. 9.2.0-beta.1 is what
+#                       the repo's .gitlab-ci.yml uses and what the kernel
+#                       sources need: kernel_flash_attention.cpp instantiates
+#                       the 7-argument TPipe<> form, which the 9.0.0 headers do
+#                       not have, so the wheel build fails on 9.0.0 (the
+#                       standalone reference kernels still build there).
+#   PTO_KERNELS_COMMIT  (default: 301ce774e316cc50d521842468f9d879d25aff98)
 #   INSTALL_PREFIX      (default: /opt)
 #
 # REQUIREMENTS:
@@ -71,12 +71,12 @@
 #   - A5 kernels on this 910B image use CA-model paths only (`msprof`, `cannsim`,
 #     `linked`); never `./run_sim.sh direct` for A5 here (507035 fault).
 
-ARG CANN_VERSION=9.1.0
+ARG CANN_VERSION=9.2.0-beta.1
 FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
 
 ARG CANN_VERSION
 ARG PTO_KERNELS_REPO=https://github.com/huawei-csl/pto-kernels.git
-ARG PTO_KERNELS_COMMIT=a15f2d2911a451c2d8303f3594517d4191e67b6a
+ARG PTO_KERNELS_COMMIT=301ce774e316cc50d521842468f9d879d25aff98
 ARG INSTALL_PREFIX=/opt
 
 # Keep the CANN home explicit: run_sim.sh resolves ASCEND_HOME_PATH first, and

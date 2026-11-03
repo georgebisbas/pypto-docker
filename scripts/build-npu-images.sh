@@ -8,7 +8,8 @@
 #   ./scripts/build-npu-images.sh [pypto|simpler|pto-kernels|all]
 #
 # Env overrides (only applied if non-empty; otherwise Dockerfile defaults apply):
-#   CANN_VERSION      selects base image tag and cann-* paths (both images)
+#   CANN_VERSION      selects base image tag and cann-* paths (defaults:
+#                     pypto/simpler 9.0.0, pto-kernels 9.2.0-beta.1)
 #   INSTALL_PREFIX    install root, default /opt                (both images)
 #   PYPTO_COMMIT      pin pypto commit                           (pypto image only)
 #   PTO_ISA_COMMIT    pin pto-isa commit                          (both images)
