@@ -75,7 +75,7 @@ Build standalone hw-native-sys image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg PYPTO_COMMIT=950a30ec9a0f81b4f9d42fde778ac2ca9e2c82bc \
+  --build-arg PYPTO_COMMIT=8a11f4e6ea6724da0e046ddd792ee314ba011c37 \
   --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t pypto3-hw-native-sys:cann9 \
   - < Dockerfile.hw-native-sys.cann9.0
@@ -97,7 +97,7 @@ Build standalone simpler image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43 \
+  --build-arg SIMPLER_COMMIT=391b2fbcd4dd053204a677662c39b6b7636e8043 \
   --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t simpler-cann9 \
   - < Dockerfile.simpler.cann9.0
@@ -118,6 +118,10 @@ docker build \
   - < Dockerfile.pytorch-hccl-tests.cann9.0
 ```
 
+> **CI-aligned defaults (2026-11-04):** pypto `8a11f4e6`, PTOAS `v0.72`, pto-isa
+> `f83d4b7e`, simpler `391b2fbc`, pypto-lib `d9a04f8b`. The pypto sim/cann9 images derive
+> pto-isa from the pinned runtime's `pto_isa.pin`, mirroring the pypto `toolchain` job.
+
 Build standalone local simulation image (no NPU required):
 
 ```bash
@@ -127,7 +131,7 @@ docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu2
 Build standalone local simulation image (pinned commits):
 
 ```bash
-docker build --build-arg PYPTO_COMMIT=950a30ec9a0f81b4f9d42fde778ac2ca9e2c82bc --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+docker build --build-arg PYPTO_COMMIT=8a11f4e6ea6724da0e046ddd792ee314ba011c37 --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 ```
 
 Build standalone simpler simulation image (no NPU, no pypto):
@@ -140,7 +144,7 @@ Build standalone simpler simulation image (pinned commits):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=142ee15a7fa46925b9802984fa1ac75676e87d43 \
+  --build-arg SIMPLER_COMMIT=391b2fbcd4dd053204a677662c39b6b7636e8043 \
   --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t simpler-hw-native-sys:sim \
   -f Dockerfile.simpler.sim.ubuntu22.04 .
@@ -153,11 +157,11 @@ docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu2
 docker build -t pypto-lib-hw-native-sys:sim -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```
 
-Build pypto-lib simulation image (pinned pypto-lib commit):
+Build pypto-lib simulation image (custom pypto-lib commit):
 
 ```bash
 docker build \
-  --build-arg PYPTO_LIB_COMMIT=420bc107942f94626dc1405172a20eeff70e176f \
+  --build-arg PYPTO_LIB_COMMIT=d9a04f8b1d4cb62220e0f9b0b31d971dad9b0746 \
   -t pypto-lib-hw-native-sys:sim \
   -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 ```

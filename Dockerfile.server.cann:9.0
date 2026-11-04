@@ -143,9 +143,15 @@ ENV PTO_ISA_ROOT=/opt/pto-isa
 # cp310 manylinux wheel (mirrors pypto CI's toolchain job since PR #2291).
 # The wheel is CPython 3.10-only (cp310 ABI tag), so it is installed into
 # a dedicated python3.10 venv; the base image is Python 3.12.
-ARG PTOAS_VERSION=v0.70
-ARG PTOAS_SHA256=d7fe1da289c966b47fb6de1e6426e3fcc434f57853e919906083631450632847
+ARG PTOAS_VERSION=v0.72
+ARG PTOAS_SHA256_X86_64=2cc47b1d4c8ace884fb12f7691e0c368132fefef401060c920bed2a5210e3db7
+ARG PTOAS_SHA256_AARCH64=69bd51ccd3d9cc4ad0a6a7b296b46dc533d60b214ded9450fb0f90a83a765ca6
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m).whl" && \
+    case "$(uname -m)" in \
+      x86_64) PTOAS_SHA256="${PTOAS_SHA256_X86_64}" ;; \
+      aarch64) PTOAS_SHA256="${PTOAS_SHA256_AARCH64}" ;; \
+      *) echo "unsupported architecture: $(uname -m)"; exit 1 ;; \
+    esac && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
       -o "/tmp/${PTOAS_WHEEL}" && \

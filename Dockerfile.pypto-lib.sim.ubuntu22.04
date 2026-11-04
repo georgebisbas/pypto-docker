@@ -7,12 +7,12 @@
 # Prerequisite base image (build once):
 #   docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 #
-# BUILD (defaults — pypto-lib main):
+# BUILD (defaults — pinned pypto-lib d9a04f8b):
 #   docker build -t pypto-lib-hw-native-sys:sim -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 #
-# BUILD (pinned pypto-lib commit):
+# BUILD (custom pypto-lib commit):
 #   docker build \
-#     --build-arg PYPTO_LIB_COMMIT=420bc107942f94626dc1405172a20eeff70e176f \
+#     --build-arg PYPTO_LIB_COMMIT=d9a04f8b1d4cb62220e0f9b0b31d971dad9b0746 \
 #     -t pypto-lib-hw-native-sys:sim \
 #     -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 #
@@ -52,7 +52,7 @@ ARG BASE_IMAGE=pypto3-hw-native-sys:sim
 FROM ${BASE_IMAGE}
 
 ARG INSTALL_PREFIX=/opt
-ARG PYPTO_LIB_COMMIT=main
+ARG PYPTO_LIB_COMMIT=d9a04f8b1d4cb62220e0f9b0b31d971dad9b0746
 
 ENV PYPTO_LIB_DIR=${INSTALL_PREFIX}/pypto-lib
 
