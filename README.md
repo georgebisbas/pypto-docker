@@ -308,7 +308,7 @@ Key rules:
 ### Simpler-only simulation (`Dockerfile.simpler.sim.ubuntu22.04`)
 
 ```bash
-docker run --rm -it --shm-size=4g simpler-hw-native-sys:sim
+docker run --rm -it --shm-size=8g simpler-hw-native-sys:sim
 ```
 
 Inside the container:
@@ -321,12 +321,15 @@ python -c "import simpler; print('simpler ok')"
 /opt/pypto-tooling/scripts/run-simpler-l3-sim.sh distributed
 ```
 
-Use `--shm-size=4g` on `docker run` when running L3 tests (forked workers + torch shared memory exhaust default `/dev/shm`).
+Use `--shm-size=8g` on `docker run` when running L3 tests (forked workers + torch shared memory
+exhaust default `/dev/shm`). 8g is the current default: the `93f1fc98a` runtime pin needs more
+shared memory than `31f9e72e`, and the 4097-element allreduce intrinsic SIGSEGVs in
+`share_memory_` at 4g (it passes at 8g).
 
 ### pypto-lib simulation (`Dockerfile.pypto-lib.sim.ubuntu22.04`)
 
 ```bash
-docker run --rm -it --shm-size=4g pypto-lib-hw-native-sys:sim
+docker run --rm -it --shm-size=8g pypto-lib-hw-native-sys:sim
 ```
 
 Inside the container:
@@ -342,19 +345,20 @@ pytest tests/golden -v
 Local branch iteration (mount both worktrees; reinstall pypto only when pypto sources change):
 
 ```bash
-docker run --rm -it --shm-size=4g \
+docker run --rm -it --shm-size=8g \
   -v /path/to/pypto:/opt/pypto \
   -v /path/to/pypto-lib:/opt/pypto-lib \
   pypto-lib-hw-native-sys:sim
 # inside: pip install --no-build-isolation -e '/opt/pypto[dev]'
 ```
 
-Distributed sim examples (`allreduce.py`, DeepSeek EP models) need `--shm-size=4g` at `docker run` time.
+Distributed sim examples (`allreduce.py`, DeepSeek EP models) need `--shm-size=8g` at `docker run`
+time (4g is insufficient with the `93f1fc98a` runtime pin).
 
 Local branch (mount workspace `simpler/`):
 
 ```bash
-docker run --rm -it --shm-size=4g -v /path/to/simpler:/opt/simpler simpler-hw-native-sys:sim
+docker run --rm -it --shm-size=8g -v /path/to/simpler:/opt/simpler simpler-hw-native-sys:sim
 # inside: pip install --no-build-isolation -e '.[test]'
 #         /opt/pypto-tooling/scripts/run-simpler-l3-sim.sh distributed
 ```

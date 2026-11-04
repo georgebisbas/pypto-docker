@@ -90,4 +90,4 @@ if [[ "${FAILED}" -ne 0 ]]; then
 fi
 echo "${C_GREEN}${C_BOLD}Done. Sim image(s) built.${C_RESET}"
 echo "Run e.g.: docker run --rm -it pypto3-hw-native-sys:sim"
-echo "          docker run --rm -it --shm-size=4g simpler-hw-native-sys:sim"
+echo "          docker run --rm -it --shm-size=8g simpler-hw-native-sys:sim"
