@@ -7,12 +7,12 @@
 # Prerequisite base image (build once):
 #   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
-# BUILD (defaults — pinned pypto-lib d9a04f8b):
+# BUILD (defaults — pinned pypto-lib 81ceb116):
 #   docker build -t pypto-lib-hw-native-sys:cann9 - < Dockerfile.pypto-lib.cann9.0
 #
 # BUILD (custom pypto-lib commit):
 #   docker build \
-#     --build-arg PYPTO_LIB_COMMIT=d9a04f8b1d4cb62220e0f9b0b31d971dad9b0746 \
+#     --build-arg PYPTO_LIB_COMMIT=81ceb116cb4c2dd9c0a46f28946422bc28423245 \
 #     -t pypto-lib-hw-native-sys:cann9 \
 #     - < Dockerfile.pypto-lib.cann9.0
 #
@@ -51,7 +51,7 @@ ARG BASE_IMAGE=pypto3-hw-native-sys:cann9
 FROM ${BASE_IMAGE}
 
 ARG INSTALL_PREFIX=/opt
-ARG PYPTO_LIB_COMMIT=d9a04f8b1d4cb62220e0f9b0b31d971dad9b0746
+ARG PYPTO_LIB_COMMIT=81ceb116cb4c2dd9c0a46f28946422bc28423245
 
 ENV PYPTO_LIB_DIR=${INSTALL_PREFIX}/pypto-lib
 

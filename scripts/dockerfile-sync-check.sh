@@ -160,7 +160,9 @@ check_ptoa() {
 
 for f in Dockerfile.hw-native-sys.cann9.0 Dockerfile.server.cann:9.0; do
   check_ptoa PTOAS_VERSION "$REPO_ROOT/$f" "$PTOAS_VERSION_UP"
-  check_ptoa PTOAS_SHA256  "$REPO_ROOT/$f" "$PTOAS_AARCH64_UP"
+  # aarch64/x86_64 digests are pinned separately; the RUN selects by uname -m.
+  check_ptoa PTOAS_SHA256_AARCH64 "$REPO_ROOT/$f" "$PTOAS_AARCH64_UP"
+  check_ptoa PTOAS_SHA256_X86_64  "$REPO_ROOT/$f" "$PTOAS_X86_64_UP"
 done
 # Sim image installs the x86_64 wheel (SHA256 != tarball SHA): verify the
 # wheel digest equals versions.env PTOAS_SHA256_X86_64.
@@ -171,15 +173,20 @@ else
   err "  DRIFT PTOAS_WHEEL_SHA256 (sim): pinned ${SIM_WHEEL_SHA:0:12}, versions.env x86_64 ${PTOAS_X86_64_UP:0:12}"
   DRIFT=1
 fi
-# Sim image also hardcodes the version in the wheel filename (ptoas-<ver>-...).
-# The filename uses "0.57" without the leading "v"; compare against the
-# version with any leading "v" stripped.
-SIM_WHEEL_VER="$(grep -oP 'ptoas-\K[0-9.]+(?=-cp310)' "$REPO_ROOT/Dockerfile.hw-native-sys.sim.ubuntu22.04" | head -1 || true)"
-if [[ "$SIM_WHEEL_VER" == "${PTOAS_VERSION_UP#v}" ]]; then
-  ok "  OK   sim wheel filename version == $PTOAS_VERSION_UP"
+# The sim image must derive the wheel filename from PTOAS_VERSION (checked
+# below), so a version bump cannot leave a stale hardcoded filename behind.
+SIM_F="$REPO_ROOT/Dockerfile.hw-native-sys.sim.ubuntu22.04"
+check_ptoa PTOAS_VERSION "$SIM_F" "$PTOAS_VERSION_UP"
+if grep -q 'ptoas-${PTOAS_VERSION#v}-cp310' "$SIM_F"; then
+  ok "  OK   sim wheel filename derived from PTOAS_VERSION"
 else
-  err "  DRIFT sim wheel filename version: pinned $SIM_WHEEL_VER, upstream ${PTOAS_VERSION_UP#v}"
-  DRIFT=1
+  SIM_WHEEL_VER="$(grep -oP 'ptoas-\K[0-9.]+(?=-cp310)' "$SIM_F" | head -1 || true)"
+  if [[ "$SIM_WHEEL_VER" == "${PTOAS_VERSION_UP#v}" ]]; then
+    ok "  OK   sim wheel filename version == $PTOAS_VERSION_UP"
+  else
+    err "  DRIFT sim wheel filename version: pinned ${SIM_WHEEL_VER:-<none>}, upstream ${PTOAS_VERSION_UP#v}"
+    DRIFT=1
+  fi
 fi
 
 # aarch64 images must install the cp310 wheel (not the deprecated cp311 tarball,

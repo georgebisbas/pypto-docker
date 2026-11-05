@@ -135,7 +135,7 @@ Note: No pypto, CANN, or ptoas — simpler-only sim image. Build context must in
 |---|-------|---------|--------------------------|
 | 1 | Base image (`pypto3-hw-native-sys:sim`) `PYPTO_COMMIT` drifted? | Run `Dockerfile.hw-native-sys.sim.ubuntu22.04` checks first; the pypto-lib sim image inherits from it | Rebuild base image, then rebuild this image |
 | 2 | pypto-lib `origin/main` ahead of `PYPTO_LIB_COMMIT` example SHA in header? | `git -C /path/to/pypto-lib rev-parse origin/main` vs header `--build-arg PYPTO_LIB_COMMIT=` | Update build example comment in header |
-| 3 | pypto-lib quick-check examples still valid? | Verify `examples/beginner/hello_world.py -p a2a3sim`, `examples/advanced/allreduce.py -p a2a3sim`, `models/deepseek/v4-flash/moe.py -p a2a3sim` exist in pypto-lib tree — model paths get renamed (pypto-lib #816 split `models/deepseek/v4/` into `v4-flash/` + `v4-pro/`) | Update header QUICK CHECKS comment |
+| 3 | pypto-lib quick-check examples still valid? | Verify `examples/beginner/hello_world.py -p a2a3sim`, `examples/advanced/allreduce.py -p a2a3sim`, `models/deepseek_v4_flash_dspark/moe.py -p a2a3sim` exist in pypto-lib tree — model paths get renamed (pypto-lib #816 split `models/deepseek/v4/` into `v4-flash/` + `v4-pro/`; #886 flattened `models/` to one directory per model build, e.g. `models/deepseek_v4_flash_dspark/`) | Update header QUICK CHECKS comment |
 | 4 | `pytest tests/golden -v` still the correct test command? | Check `pypto-lib/.claude/skills/test-with-golden/SKILL.md` | Update header test command |
 
 Note: Pass-through image — no new build steps beyond `git clone pypto-lib`. All toolchain (pypto, ptoas, pto-isa) comes from the base image.
