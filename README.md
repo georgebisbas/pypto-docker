@@ -71,11 +71,22 @@ Build standalone hw-native-sys image (defaults):
 docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 ```
 
+Build standalone hw-native-sys image on CANN 9.2 (CANN 9.1+ ships an unrelated
+`pypto` package; the Dockerfile prepends the interpreter's site-packages so it
+cannot shadow the built one):
+
+```bash
+docker build \
+  --build-arg CANN_VERSION=9.2.0-beta.1 \
+  -t pypto3-hw-native-sys:cann9.2 \
+  - < Dockerfile.hw-native-sys.cann9.0
+```
+
 Build standalone hw-native-sys image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg PYPTO_COMMIT=2a5ec1280abf3c608090ddf4e3275fd940d52867 \
+  --build-arg PYPTO_COMMIT=09e5969a43a45142d5ff730237f1f09efbbd0eb4 \
   --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 \
   -t pypto3-hw-native-sys:cann9 \
   - < Dockerfile.hw-native-sys.cann9.0
@@ -93,12 +104,21 @@ Build standalone simpler image (defaults):
 docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 ```
 
+Build standalone simpler image on CANN 9.2:
+
+```bash
+docker build \
+  --build-arg CANN_VERSION=9.2.0-beta.1 \
+  -t simpler-cann9.2 \
+  - < Dockerfile.simpler.cann9.0
+```
+
 Build standalone simpler image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=8001268ba9e82fe11c8627c89297646f09b60e8d \
-  --build-arg PTO_ISA_COMMIT=5487a6b0e8d9bd3653dbee8d7c874c667ee8db2f \
+  --build-arg SIMPLER_COMMIT=f05fe215ccbc0063015225f05ea1a2bdaa9cd181 \
+  --build-arg PTO_ISA_COMMIT=90a3796597a5fabc2ce5066e73f785c2e85822f7 \
   -t simpler-cann9 \
   - < Dockerfile.simpler.cann9.0
 ```
@@ -118,10 +138,15 @@ docker build \
   - < Dockerfile.pytorch-hccl-tests.cann9.0
 ```
 
-> **CI-aligned defaults (2026-11-05):** pypto `2a5ec128`, PTOAS `v0.72`, pto-isa
-> `f83d4b7e` (pypto runtime pin) / `5487a6b0` (simpler pin), simpler `8001268b`, pypto-lib
-> `81ceb116`, pto-kernels `48bd1ea2`. The pypto sim/cann9 images derive pto-isa from the
-> pinned runtime's `pto_isa.pin`, mirroring the pypto `toolchain` job.
+> **CI-aligned CANN-image defaults (2026-11-09):** pypto `09e5969a`, PTOAS `v0.72`,
+> pto-isa `f83d4b7e` (pypto runtime pin) / `90a37965` (simpler pin), simpler `f05fe215`,
+> pto-kernels `48bd1ea2`; CANN 9.0.0 by default, CANN 9.2.0-beta.1 for the `:cann9.2`
+> images. The pypto can/sim images derive pto-isa from the pinned runtime's
+> `pto_isa.pin`, mirroring the pypto `toolchain` job.
+>
+> The **simulation** images (`*.sim.ubuntu22.04`) are still pinned to the previous
+> commits (`2a5ec128` / `8001268b`, pto-isa `5487a6b0`) until they are rebuilt;
+> `scripts/dockerfile-sync-check.sh` reports them as drift.
 
 Build standalone local simulation image (no NPU required):
 

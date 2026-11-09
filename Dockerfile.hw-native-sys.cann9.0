@@ -15,17 +15,26 @@
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
 #   - Ascend 910B NPUs + host driver at runtime
-#   - CANN >= 9.0.0
+#   - CANN >= 9.0.0 (9.0.0 and 9.2.0-beta.1 are built/tested)
 #
 # SCOPE: real NPU execution tested only on a2a3 platform.
 #   a2a3sim needs real GCC 15+ (_Float16 in pto-isa CPU sim); the build installs
 #   gcc-15/g++-15 from ubuntu-toolchain-r/test when available.
+#   CANN 9.2.0-beta.1 ships its own unrelated `pypto` distribution (0.2.1; it
+#   also owns pypto_pro/) under python/site-packages. Installing this project's
+#   pypto makes pip uninstall that name conflict, and the build also prepends
+#   the interpreter's purelib to PYTHONPATH — because the base image's
+#   ENTRYPOINT re-prepends CANN's paths to PYTHONPATH on every `docker run`
+#   (see near the end). CANN's pypto_pro is therefore unavailable here.
 #
 # BUILD (defaults):
 #   docker build -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
+# BUILD (CANN 9.2, as used for the 9.2 images):
+#   docker build --build-arg CANN_VERSION=9.2.0-beta.1 -t pypto3-hw-native-sys:cann9.2 - < Dockerfile.hw-native-sys.cann9.0
+#
 # BUILD (custom prefix / pinned pto-isa / different commit):
-#   docker build --build-arg PYPTO_COMMIT=2a5ec1280abf3c608090ddf4e3275fd940d52867 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#   docker build --build-arg PYPTO_COMMIT=09e5969a43a45142d5ff730237f1f09efbbd0eb4 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 # RUN (single-device, NO HCCL):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
@@ -152,9 +161,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && \
     (apt-get install -y --no-install-recommends gcc-15 g++-15 || true) && \
     if ! command -v g++-15 >/dev/null 2>&1; then \
+      echo "WARNING: g++-15 unavailable; aliasing $(g++ -dumpversion) as g++-15"; \
       ln -sf "$(command -v g++)" /usr/local/bin/g++-15; \
     fi && \
     if ! command -v gcc-15 >/dev/null 2>&1; then \
+      echo "WARNING: gcc-15 unavailable; aliasing $(gcc -dumpversion) as gcc-15"; \
       ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
     fi
 
@@ -188,7 +199,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
 # GitHub does not allow shallow-fetching arbitrary SHAs directly.
-ARG PYPTO_COMMIT=2a5ec1280abf3c608090ddf4e3275fd940d52867
+ARG PYPTO_COMMIT=09e5969a43a45142d5ff730237f1f09efbbd0eb4
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -260,10 +271,15 @@ RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m)
     "${PTOAS_DIR}/bin/ptoas" --version && \
     rm -f "/tmp/${PTOAS_WHEEL}"
 
-# Build simpler runtime extension.
+# Build simpler runtime extension. Select the same targets pypto's a2a3 CI
+# jobs use (setup-ci-job `runtime-targets`): without an explicit list the
+# runtime builds every platform the host detects, including A5, and an
+# A5 build requires HcclChannelAcquireWithConfig for the URMA provider — an
+# API absent from CANN 9.0.0 and 9.2.0-beta.1, so the wheel build fails.
 RUN --mount=type=cache,target=/root/.cache/pip \
     rm -rf ./runtime/build && \
-    pip install --no-build-isolation ./runtime
+    pip install --no-build-isolation \
+      --config-settings "build.targets=build_package_a2a3;build_package_sim" ./runtime
 
 # Build and install pypto.
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -320,7 +336,22 @@ RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
 # that pypto, scikit-build-core, and pytest live in. pypto resolves `ptoas` via
 # PTOAS_ROOT, so PATH order does not affect codegen.
 ENV PATH=${PATH}:${PTOAS_DIR}/bin
-ENV PYTHONPATH=${PYPTO_DIR}/runtime/python:${PYPTO_DIR}/runtime/examples/scripts
+
+# CANN 9.2.0-beta.1 ships a `pypto` distribution (0.2.1, pybind11-based,
+# unrelated to this project; it also owns pypto_pro/) in its
+# python/site-packages. Installing this project's pypto below makes pip
+# uninstall that name conflict, which is what ultimately keeps `import pypto`
+# ours: the CANN base image's ENTRYPOINT re-prepends CANN's directories to
+# PYTHONPATH on every `docker run`, so ENV order alone cannot win. The purelib
+# symlink is kept and placed first for direct Python launches and to mirror
+# pypto CI's activate.sh; CANN's te/tbe/... still resolve from its own dirs.
+# Note that CANN's pypto_pro (same distribution) is removed as a consequence.
+RUN SITE="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" && \
+    test -n "$SITE" && \
+    mkdir -p /opt/python-site && \
+    ln -sfn "$SITE" /opt/python-site/site
+
+ENV PYTHONPATH=/opt/python-site/site:${PYPTO_DIR}/runtime/python:${PYPTO_DIR}/runtime/examples/scripts
 ENV PYTHONPATH=${PYTHONPATH}:${CANN_HOME}/python/site-packages:${CANN_HOME}/opp/built-in/op_impl/ai_core/tbe
 ENV PYTHONPATH=${PYTHONPATH}:/usr/local/Ascend/ascend-toolkit/latest/python/site-packages:/usr/local/Ascend/ascend-toolkit/latest/opp/built-in/op_impl/ai_core/tbe
 

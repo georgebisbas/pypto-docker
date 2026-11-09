@@ -55,7 +55,40 @@ Task starts
 | `Dockerfile.hw-native-sys.dev.cann9.0`, `Dockerfile.simpler.dev.cann9.0` | Personal dev layer (git identity, fork remote, editable install) on the cann9 images | `docker build -t img -f Dockerfile... .` | Yes (a2a3) |
 | `Dockerfile.hw-native-sys.sim.local`, `...sim.local-overlay` | Local overlays on a sim image for a private pypto checkout (no pins) | see file headers | No |
 
-All use `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12` as base image, **except** `Dockerfile.pto-kernels.cann9.0`, which follows pto-kernels' `.gitlab-ci.yml` and currently uses CANN **9.2.0-beta.1** (its kernel sources need headers the 9.0.0 toolchain lacks).
+The CANN images default to `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12`.
+`Dockerfile.hw-native-sys.cann9.0` and `Dockerfile.simpler.cann9.0` also build
+against CANN **9.2.0-beta.1** via `--build-arg CANN_VERSION=9.2.0-beta.1`
+(tag the result `:cann9.2` to keep the 9.0.0 image). `Dockerfile.pto-kernels.cann9.0`
+**defaults** to 9.2.0-beta.1 because its kernel sources need headers the 9.0.0
+toolchain lacks.
+
+CANN 9.2 notes:
+
+- **`pypto` package shadowing.** CANN 9.2.0-beta.1 ships an unrelated `pypto`
+  distribution 0.2.1 (it also owns `pypto_pro/`) in
+  `$CANN_HOME/python/site-packages` (some 9.1 builds do too). Two things keep
+  `import pypto` resolving to the built project: `pip install` uninstalls the
+  name conflict (which also removes CANN's `pypto_pro`), and the pypto image
+  prepends a stable purelib symlink (`/opt/python-site/site`). The prepend is
+  not sufficient on its own — the CANN base image's **ENTRYPOINT re-prepends**
+  CANN's paths to PYTHONPATH on every `docker run`, so do not replace the pip
+  install with an externally-installed pypto. Verify with
+  `python3 -c "import pypto; print(pypto.__file__)"` (must be
+  `/opt/python-site/site/pypto/__init__.py`, version 0.1.0).
+- **GCC.** The CANN bases ship GCC 11. Both Dockerfiles try to install real
+  `gcc-15`/`g++-15` from `ppa:ubuntu-toolchain-r/test` and only fall back to
+  aliasing the distro compiler (with a build-log WARNING) if the PPA has no
+  build for the target arch. Verify with `gcc-15 -dumpversion` inside the image.
+- **Python version vs CI.** The CANN base ships Python 3.12; pypto's
+  `unit-tests` CI job runs on Python 3.10. On 3.12 the nanobind binding rejects
+  mixed `int`/`Expr` shape lists (`ir.TileType([var, 64], ...)`) — at pypto
+  `09e5969` that is 124 of 126 UT failures (the other two are JIT identity
+  tests). This is pre-existing (reproduced on the older `cann9-9.1` image), not
+  CANN-9.2-specific; use a CPython 3.10 wheel/venv if full UT parity matters.
+- **simpler no-hardware UTs** need both `build_package_a2a3;build_package_sim`
+  and the `.[test]` extras; the image installs both. One cache-permission test
+  assumes a non-root user, and one `-n 0` test misbehaves under an outer `-n`,
+  so expect those two outside CI's exact invocation.
 
 ## When to update Dockerfiles
 

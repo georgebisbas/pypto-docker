@@ -8,14 +8,15 @@
 # All paths are driven by build args:
 #   CANN_VERSION    (default: 9.0.0)  — selects base image tag and all cann-* paths
 #   INSTALL_PREFIX  (default: /opt)   — root for simpler and pto-isa installs
-#   SIMPLER_COMMIT  (default: 8001268ba9e82fe11c8627c89297646f09b60e8d) — simpler commit to build from; changing it busts cache
-#   PTO_ISA_COMMIT  (default: 5487a6b0e8d9bd3653dbee8d7c874c667ee8db2f) — pto-isa commit from simpler's pto_isa.pin at the pinned simpler commit
+#   SIMPLER_COMMIT  (default: f05fe215ccbc0063015225f05ea1a2bdaa9cd181) — simpler commit to build from; changing it busts cache
+#   PTO_ISA_COMMIT  (default: 90a3796597a5fabc2ce5066e73f785c2e85822f7) — pto-isa commit from simpler's pto_isa.pin at the pinned simpler commit
 #
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
 #   - Ascend 910B NPUs + host driver at runtime
 #   - CANN >= 9.0.0: libopapi.so must export aclnnShmemSdmaStarsQuery
 #     (absent in CANN 8.5.0) for comm_alloc_windows / SDMA workspace.
+#     9.0.0 and 9.2.0-beta.1 are built/tested.
 #
 # SCOPE (this image): real NPU execution on Ascend 910B (a2a3 platform).
 #   simpler upstream supports simulator platforms (a2a3sim/a5sim), but this image
@@ -24,8 +25,11 @@
 # BUILD:
 #   docker build -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
+# BUILD (CANN 9.2, as used for the 9.2 images):
+#   docker build --build-arg CANN_VERSION=9.2.0-beta.1 -t simpler-cann9.2 - < Dockerfile.simpler.cann9.0
+#
 # BUILD (pinned simpler + pinned pto-isa):
-#   docker build --build-arg SIMPLER_COMMIT=8001268ba9e82fe11c8627c89297646f09b60e8d --build-arg PTO_ISA_COMMIT=5487a6b0e8d9bd3653dbee8d7c874c667ee8db2f -t simpler-cann9 - < Dockerfile.simpler.cann9.0
+#   docker build --build-arg SIMPLER_COMMIT=f05fe215ccbc0063015225f05ea1a2bdaa9cd181 --build-arg PTO_ISA_COMMIT=90a3796597a5fabc2ce5066e73f785c2e85822f7 -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
 # RUN (single-device):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
@@ -40,8 +44,9 @@
 # COMMON COMMANDS INSIDE CONTAINER (copy-paste; defaults: INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0):
 #
 #   cd /opt/simpler
-#   # Rebuild with the a2a3 target, as simpler CI's a2a3 jobs do:
-#   pip install --no-build-isolation --config-settings=build.targets=build_package_a2a3 .
+#   # Rebuild with the a2a3 + sim targets, as the image build does:
+#   pip install --no-build-isolation \
+#     --config-settings=build.targets=build_package_a2a3\;build_package_sim ".[test]"
 #   # No-hardware UTs (CI job ut-no-hardware):
 #   python -m pytest tests/ut -m "not requires_hardware" -v
 #   # Hardware UTs (CI job ut-a2a3):
@@ -82,23 +87,28 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-      git curl ca-certificates \
+      git curl ca-certificates software-properties-common gnupg \
       ccache \
       build-essential cmake ninja-build pkg-config \
       mpich libmpich-dev \
       ripgrep nano \
       bash-completion gh && \
+    add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
+    apt-get update && \
+    (apt-get install -y --no-install-recommends gcc-15 g++-15 || true) && \
     if ! command -v g++-15 >/dev/null 2>&1; then \
+      echo "WARNING: g++-15 unavailable; aliasing $(g++ -dumpversion) as g++-15"; \
       ln -sf "$(command -v g++)" /usr/local/bin/g++-15; \
     fi && \
     if ! command -v gcc-15 >/dev/null 2>&1; then \
+      echo "WARNING: gcc-15 unavailable; aliasing $(gcc -dumpversion) as gcc-15"; \
       ln -sf "$(command -v gcc)" /usr/local/bin/gcc-15; \
     fi
 
 ENV CC=gcc-15 \
     CXX=g++-15
 
-ARG SIMPLER_COMMIT=8001268ba9e82fe11c8627c89297646f09b60e8d
+ARG SIMPLER_COMMIT=f05fe215ccbc0063015225f05ea1a2bdaa9cd181
 
 # Clone simpler at a pinned commit (blobless clone supports arbitrary SHAs).
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "${SIMPLER_DIR}" && \
@@ -106,8 +116,8 @@ RUN git clone --filter=blob:none https://github.com/hw-native-sys/simpler.git "$
 
 WORKDIR ${SIMPLER_DIR}
 
-# PTO_ISA_COMMIT defaults to 5487a6b0e8d9bd3653dbee8d7c874c667ee8db2f — from simpler's pto_isa.pin at the pinned simpler commit.
-ARG PTO_ISA_COMMIT=5487a6b0e8d9bd3653dbee8d7c874c667ee8db2f
+# PTO_ISA_COMMIT defaults to 90a3796597a5fabc2ce5066e73f785c2e85822f7 — from simpler's pto_isa.pin at the pinned simpler commit.
+ARG PTO_ISA_COMMIT=90a3796597a5fabc2ce5066e73f785c2e85822f7
 
 # Auto-derive PTO_ISA_COMMIT from simpler's pto_isa.pin (the single source of
 # truth; simpler CI reads it via .github/actions/read-pto-isa).
@@ -145,12 +155,17 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# Build and install the simpler C++ extension. Select the a2a3 target
-# explicitly, mirroring simpler CI's onboard a2a3 jobs (build_package_a2a3)
-# instead of building every platform runtime into a 910B-only image.
+# Build and install the simpler C++ extension. Select a2a3 plus sim
+# explicitly: a2a3 mirrors simpler CI's onboard jobs, and sim is what the
+# no-hardware UT suite (tests/ut, `-m "not requires_hardware"`) exercises.
+# Without an explicit list the runtime builds every platform the host detects,
+# including A5, which needs HcclChannelAcquireWithConfig — absent from CANN
+# 9.0.0 and 9.2.0-beta.1.
+# `[test]` matches CI (`.[test]`) and provides safetensors/pytest-timeout/etc.
 RUN --mount=type=cache,target=/root/.cache/pip \
     rm -rf ./build && \
-    pip install --no-build-isolation --config-settings=build.targets=build_package_a2a3 .
+    pip install --no-build-isolation \
+      --config-settings=build.targets=build_package_a2a3\;build_package_sim ".[test]"
 
 # Remove set_env.sh auto-sourcing from ALL system/user startup files.
 # The Ascend base image injects these hooks; they take 10–30s and break VS Code attach.
