@@ -14,7 +14,6 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - [README.md](README.md): Repository index and quick usage.
 - [Dockerfile.hw-native-sys.cann9.0](Dockerfile.hw-native-sys.cann9.0): Standalone PyPTO image that clones all sources from GitHub at build time.
 - [Dockerfile.hw-native-sys.dev.cann9.0](Dockerfile.hw-native-sys.dev.cann9.0): Personal dev layer on top of `pypto3-hw-native-sys:cann9` — your git identity + editable install. See "Personal Dev Setup" below.
-- [Dockerfile.server.cann:9.0](Dockerfile.server.cann:9.0): Server/dev image that uses a local pypto build context.
 - [Dockerfile.simpler.cann9.0](Dockerfile.simpler.cann9.0): Standalone simpler image with pinned commit support and HCCL-safe runtime defaults.
 - [Dockerfile.simpler.dev.cann9.0](Dockerfile.simpler.dev.cann9.0): Personal dev layer on top of `simpler-cann9` — your git identity + editable install. See "Personal Dev Setup" below.
 - [Dockerfile.pytorch-hccl-tests.cann9.0](Dockerfile.pytorch-hccl-tests.cann9.0): Standalone HCCL micro-benchmark image (`torchrun` + pytorch-hccl-tests fork).
@@ -31,7 +30,6 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 
 - [README.md](README.md): Top-level index of the repository, with build commands and runtime guidance.
 - [Dockerfile.hw-native-sys.cann9.0](Dockerfile.hw-native-sys.cann9.0): Build a standalone PyPTO image by cloning repositories during build; best for reproducible CI-like setup without local source dependencies.
-- [Dockerfile.server.cann:9.0](Dockerfile.server.cann:9.0): Build a server/dev image from a local hw-native-sys workspace where pypto is copied from build context; best for local iteration.
 - [Dockerfile.simpler.cann9.0](Dockerfile.simpler.cann9.0): Build a standalone simpler-only image for runtime and worker validation when pypto is not required.
 - [Dockerfile.pytorch-hccl-tests.cann9.0](Dockerfile.pytorch-hccl-tests.cann9.0): Build a standalone HCCL benchmark image for baseline latency/bandwidth/allreduce comparisons (not for pypto/simpler composite tests).
 - [Dockerfile.hw-native-sys.sim.ubuntu22.04](Dockerfile.hw-native-sys.sim.ubuntu22.04): Build a standalone simulation-only PyPTO image for local development/testing on CPU-hosted simulators (`a2a3sim`, `a5sim`).
@@ -92,12 +90,6 @@ docker build \
   - < Dockerfile.hw-native-sys.cann9.0
 ```
 
-Build server/dev image (requires local pypto in build context):
-
-```bash
-docker build --no-cache -f "Dockerfile.server.cann:9.0" -t pypto3-dev-env:cann9 .
-```
-
 Build standalone simpler image (defaults):
 
 ```bash
@@ -144,9 +136,9 @@ docker build \
 > images. The pypto can/sim images derive pto-isa from the pinned runtime's
 > `pto_isa.pin`, mirroring the pypto `toolchain` job.
 >
-> The **simulation** images (`*.sim.ubuntu22.04`) are still pinned to the previous
-> commits (`2a5ec128` / `8001268b`, pto-isa `5487a6b0`) until they are rebuilt;
-> `scripts/dockerfile-sync-check.sh` reports them as drift.
+> The **simulation** images (`*.sim.ubuntu22.04`) use the same validated PyPTO and
+> simpler pins as the CANN images (`09e5969a` / `f05fe215`); their pto-isa pins
+> are auto-derived from those checkouts.
 
 Build standalone local simulation image (no NPU required):
 
@@ -157,7 +149,7 @@ docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu2
 Build standalone local simulation image (pinned commits):
 
 ```bash
-docker build --build-arg PYPTO_COMMIT=2a5ec1280abf3c608090ddf4e3275fd940d52867 --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+docker build --build-arg PYPTO_COMMIT=09e5969a43a45142d5ff730237f1f09efbbd0eb4 --build-arg PTO_ISA_COMMIT=f83d4b7e4be0a4ca9805944ae2d9ce8c84e581f7 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 ```
 
 Build standalone simpler simulation image (no NPU, no pypto):
@@ -170,8 +162,8 @@ Build standalone simpler simulation image (pinned commits):
 
 ```bash
 docker build \
-  --build-arg SIMPLER_COMMIT=8001268ba9e82fe11c8627c89297646f09b60e8d \
-  --build-arg PTO_ISA_COMMIT=5487a6b0e8d9bd3653dbee8d7c874c667ee8db2f \
+  --build-arg SIMPLER_COMMIT=f05fe215ccbc0063015225f05ea1a2bdaa9cd181 \
+  --build-arg PTO_ISA_COMMIT=90a3796597a5fabc2ce5066e73f785c2e85822f7 \
   -t simpler-hw-native-sys:sim \
   -f Dockerfile.simpler.sim.ubuntu22.04 .
 ```
@@ -437,6 +429,14 @@ export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so   # direct / no-qu
 > See [TASK_QUEUE.md](TASK_QUEUE.md) pitfall P1.
 
 The **pytorch-hccl-tests** image uses torch HCCL directly and does not need `LD_PRELOAD`; it still requires `--pid=host` for multi-rank NPU collectives.
+
+### CANN 9.2 build note
+
+The existing CANN Dockerfiles accept `--build-arg CANN_VERSION=9.2.0-beta.1`.
+The validated 9.2-beta image explicitly builds the `a2a3` and simulator targets;
+this avoids the A5 URMA target because that CANN image does not provide
+`HcclChannelAcquireWithConfig`. Use a CANN release that provides that API before
+enabling the A5 onboard target.
 
 Mount only the host driver path at runtime:
 

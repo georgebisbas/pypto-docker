@@ -44,13 +44,12 @@ Task starts
 | Dockerfile | What it builds | Build command | Needs NPU? |
 |-----------|---------------|---------------|------------|
 | `Dockerfile.hw-native-sys.cann9.0` | pypto + simpler + pto-isa + ptoas | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
-| `Dockerfile.simpler.cann9.0` | simpler + pto-isa only | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
+| `Dockerfile.simpler.cann9.0` | simpler + pto-isa only (a2a3-only build) | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
 | `Dockerfile.hw-native-sys.sim.ubuntu22.04` | pypto + pto-isa (sim mode) | `docker build -t img -f Dockerfile... .` | No |
 | `Dockerfile.simpler.sim.ubuntu22.04` | simpler + pto-isa (sim mode) | `docker build -t img -f Dockerfile... .` | No |
 | `Dockerfile.pypto-lib.sim.ubuntu22.04` | pypto-lib on top of `pypto3-hw-native-sys:sim` | `docker build -t img -f Dockerfile... .` | No |
 | `Dockerfile.pypto-lib.cann9.0` | pypto-lib on top of `pypto3-hw-native-sys:cann9` | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
 | `Dockerfile.pytorch-hccl-tests.cann9.0` | HCCL benchmarks | `docker build -t img - < Dockerfile...` | Yes (a2a3) |
-| `Dockerfile.server.cann:9.0` | pypto dev workspace | `docker build -t img -f Dockerfile... .` | Yes (a2a3) |
 | `Dockerfile.pto-kernels.cann9.0` | huawei-csl/pto-kernels at a pinned commit + compiled wheel (CA-model sim and onboard) | `./scripts/build-npu-images.sh pto-kernels` | No for simulation; yes for real runs |
 | `Dockerfile.hw-native-sys.dev.cann9.0`, `Dockerfile.simpler.dev.cann9.0` | Personal dev layer (git identity, fork remote, editable install) on the cann9 images | `docker build -t img -f Dockerfile... .` | Yes (a2a3) |
 | `Dockerfile.hw-native-sys.sim.local`, `...sim.local-overlay` | Local overlays on a sim image for a private pypto checkout (no pins) | see file headers | No |
@@ -205,16 +204,6 @@ WORLD_SIZE=8 make mbw-mr DEVICE=npu             # mbw_mr: world_size//2 concurre
 
 As of `029e745b` the Makefile declares `export WORLD_SIZE ?= 2`, so a plain env prefix (`WORLD_SIZE=8 make mbw-mr`) is honoured. On older refs it was `export WORLD_SIZE = 2`, which shadows the env prefix — there you must pass it as a **make argument** (`make mbw-mr WORLD_SIZE=8`) or use `make -e`. Full debugging notes: `issue_pytorch_hccl_tests.md`.
 
-### `Dockerfile.server.cann:9.0` — pypto dev workspace (host mount)
-
-| # | Check | Command | What to update if drifted |
-|---|-------|---------|--------------------------|
-| 1 | pto-isa commit changed? | Same as hw-native-sys check #2 | The clone command inside the Dockerfile |
-| 2 | PTOAS version/SHA256 changed? | Read `pypto/toolchain/versions.env` (same as hw-native-sys check #3) | `ARG PTOAS_VERSION` + `ARG PTOAS_SHA256` |
-| 3 | pip deps changed in pypto CI Dockerfile? | Same as hw-native-sys check #4 | Update pip install RUN lines |
-
-Note: pypto + simpler are mounted from host at runtime, not pinned in the Dockerfile. Only pto-isa and PTOAS are cloned/downloaded at build time.
-
 ### `Dockerfile.pto-kernels.cann9.0` — pto-kernels (huawei-csl)
 
 | # | Check | Command | What to update if drifted |
@@ -258,7 +247,7 @@ echo "=== pypto origin/main ===" && git -C /tmp/pypto rev-parse --short HEAD
 echo "=== simpler origin/main ===" && git -C /tmp/simpler rev-parse --short HEAD
 echo "=== pypto-lib origin/main ===" && git -C /tmp/pypto-lib rev-parse --short HEAD
 echo "=== pytorch-hccl-tests origin/master ===" && git -C /tmp/pytorch-hccl-tests rev-parse --short HEAD
-echo "=== Current ARG SHAs ===" && rg '^ARG.*COMMIT=' Dockerfile.* && rg '^ARG PTOAS' Dockerfile.hw-native-sys.cann9.0 Dockerfile.hw-native-sys.sim.ubuntu22.04 Dockerfile.server.cann:9.0
+echo "=== Current ARG SHAs ===" && rg '^ARG.*COMMIT=' Dockerfile.* && rg '^ARG PTOAS' Dockerfile.hw-native-sys.cann9.0 Dockerfile.hw-native-sys.sim.ubuntu22.04
 echo "=== pto-isa (pypto pin) ===" && cat /tmp/pypto/runtime/pto_isa.pin 2>/dev/null || echo 'N/A'
 echo "=== pto-isa (simpler pin) ===" && cat /tmp/simpler/pto_isa.pin
 echo "=== PTOAS (toolchain/versions.env) ===" && grep -E '^(PTOAS_VERSION|PTOAS_SHA256)' /tmp/pypto/toolchain/versions.env

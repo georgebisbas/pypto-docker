@@ -134,8 +134,6 @@ check_pin PYPTO_LIB_COMMIT "$REPO_ROOT/Dockerfile.pypto-lib.sim.ubuntu22.04" "$P
 check_pin PT_HCCL_COMMIT  "$REPO_ROOT/Dockerfile.pytorch-hccl-tests.cann9.0" "$PT_HCCL_UP"
 check_pin PTO_KERNELS_COMMIT "$REPO_ROOT/Dockerfile.pto-kernels.cann9.0"   "$PTO_KERNELS_UP"
 
-# server image: host-mounted, only PTOAS + pto-isa pinned (handled below).
-
 # ---------------------------------------------------------------------------
 # PTOAS version / SHA checks.
 # ---------------------------------------------------------------------------
@@ -158,7 +156,7 @@ check_ptoa() {
   fi
 }
 
-for f in Dockerfile.hw-native-sys.cann9.0 Dockerfile.server.cann:9.0; do
+for f in Dockerfile.hw-native-sys.cann9.0; do
   check_ptoa PTOAS_VERSION "$REPO_ROOT/$f" "$PTOAS_VERSION_UP"
   # aarch64/x86_64 digests are pinned separately; the RUN selects by uname -m.
   check_ptoa PTOAS_SHA256_AARCH64 "$REPO_ROOT/$f" "$PTOAS_AARCH64_UP"
@@ -191,7 +189,7 @@ fi
 
 # aarch64 images must install the cp310 wheel (not the deprecated cp311 tarball,
 # whose SHA is NOT tracked in versions.env). Catch any regression to the tarball.
-for f in Dockerfile.hw-native-sys.cann9.0 Dockerfile.server.cann:9.0; do
+for f in Dockerfile.hw-native-sys.cann9.0; do
   if grep -q 'ptoas-bin-aarch64.tar.gz' "$REPO_ROOT/$f"; then
     err "  DRIFT $f still references the deprecated ptoas-bin-aarch64.tar.gz (use the cp310 wheel)"
     DRIFT=1
@@ -205,13 +203,12 @@ done
 #
 # There are TWO independent pto-isa truths:
 #   - pypto's  runtime/pto_isa.pin  -> pypto-based images (hw-native-sys,
-#     server, pypto-lib). server.cann:9.0 hard-pins this value.
+#     pypto-lib).
 #   - simpler's pto_isa.pin         -> simpler-based images (simpler.cann9.0,
 #     simpler.sim), which auto-derive at build time.
 # The hw-native-sys / hw-native-sys.sim images auto-derive from the cloned
 # pypto's runtime/pto_isa.pin at build time (PTO_ISA_COMMIT empty) -> SKIP.
 # ---------------------------------------------------------------------------
-check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.server.cann:9.0" "$PTO_ISA_PYPTO_UP"
 check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.simpler.cann9.0" "$PTO_ISA_SIMPLER_UP"
 check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.simpler.sim.ubuntu22.04" "$PTO_ISA_SIMPLER_UP"
 
@@ -227,7 +224,7 @@ check_pin PTO_ISA_COMMIT "$REPO_ROOT/Dockerfile.simpler.sim.ubuntu22.04" "$PTO_I
 # compare fails). Mirroring both keeps these images on the exact set CI tests.
 # ---------------------------------------------------------------------------
 CONSTRAINTS_UP="$TMPDIR_CHECK/pypto/build-constraints.txt"
-PY_IMAGES=(Dockerfile.hw-native-sys.cann9.0 Dockerfile.hw-native-sys.sim.ubuntu22.04 "Dockerfile.server.cann:9.0")
+PY_IMAGES=(Dockerfile.hw-native-sys.cann9.0 Dockerfile.hw-native-sys.sim.ubuntu22.04)
 if [[ -f "$CONSTRAINTS_UP" ]]; then
   # Check EVERY pinned input in build-constraints.txt — not just the build
   # toolchain: CI also pins pytest/pytest-forked there (the --forked pair).

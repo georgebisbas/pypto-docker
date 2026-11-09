@@ -37,7 +37,6 @@ for arbitrary SHAs you check out later.
 | Image | `cd` to |
 |-------|---------|
 | `Dockerfile.hw-native-sys.cann9.0` (standalone) | `/opt/pypto` |
-| `Dockerfile.server.cann:9.0` (mounted workspace) | `/workspace/hw-native-sys/pypto` |
 
 Use the **same** `python` / `pip` for configure and install (`which python3 pip`).
 
@@ -148,7 +147,7 @@ pip install "nanobind>=2.0.0"
 If only `runtime/` (simpler submodule) changed:
 
 ```bash
-cd /opt/pypto/runtime   # or .../pypto/runtime in server image
+cd /opt/pypto/runtime
 pip install --no-build-isolation .
 ```
 
