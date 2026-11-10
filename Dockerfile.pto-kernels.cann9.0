@@ -20,7 +20,7 @@
 #                       the 7-argument TPipe<> form, which the 9.0.0 headers do
 #                       not have, so the wheel build fails on 9.0.0 (the
 #                       standalone reference kernels still build there).
-#   PTO_KERNELS_COMMIT  (default: 48bd1ea204ffef6e2bf969ba5cb3a7462984626a)
+#   PTO_KERNELS_COMMIT  (default: 317a378c9cbcced73dc9c0d16948ef0d522a5174)
 #   INSTALL_PREFIX      (default: /opt)
 #
 # REQUIREMENTS:
@@ -76,7 +76,7 @@ FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
 
 ARG CANN_VERSION
 ARG PTO_KERNELS_REPO=https://github.com/huawei-csl/pto-kernels.git
-ARG PTO_KERNELS_COMMIT=48bd1ea204ffef6e2bf969ba5cb3a7462984626a
+ARG PTO_KERNELS_COMMIT=317a378c9cbcced73dc9c0d16948ef0d522a5174
 ARG INSTALL_PREFIX=/opt
 
 # Keep the CANN home explicit: run_sim.sh resolves ASCEND_HOME_PATH first, and
