@@ -12,7 +12,7 @@
 #
 # BUILD (custom pypto-lib commit):
 #   docker build \
-#     --build-arg PYPTO_LIB_COMMIT=f69353548f8ca149ae1defc76b30afd7bff2e9f1 \
+#     --build-arg PYPTO_LIB_COMMIT=b7776b5e0ab1b4e50fc8f299895438e7aa5a514b \
 #     -t pypto-lib-hw-native-sys:sim \
 #     -f Dockerfile.pypto-lib.sim.ubuntu22.04 .
 #
@@ -52,7 +52,7 @@ ARG BASE_IMAGE=pypto3-hw-native-sys:sim
 FROM ${BASE_IMAGE}
 
 ARG INSTALL_PREFIX=/opt
-ARG PYPTO_LIB_COMMIT=f69353548f8ca149ae1defc76b30afd7bff2e9f1
+ARG PYPTO_LIB_COMMIT=b7776b5e0ab1b4e50fc8f299895438e7aa5a514b
 
 ENV PYPTO_LIB_DIR=${INSTALL_PREFIX}/pypto-lib
 
