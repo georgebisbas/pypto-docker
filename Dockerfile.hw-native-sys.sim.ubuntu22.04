@@ -157,7 +157,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto with submodules so runtime/simpler sources are present. Private
 # forks should use Dockerfile.hw-native-sys.sim.local instead.
 ARG PYPTO_REPOSITORY=https://github.com/hw-native-sys/pypto.git
-ARG PYPTO_COMMIT=eab28d0c911b7042fb7fb8b87aa73fc0ff627a6c
+ARG PYPTO_COMMIT=894d6f8890213cc7a2a48375488c43ca83671a66
 RUN git clone --filter=blob:none "${PYPTO_REPOSITORY}" "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
