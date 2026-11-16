@@ -157,7 +157,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto with submodules so runtime/simpler sources are present. Private
 # forks should use Dockerfile.hw-native-sys.sim.local instead.
 ARG PYPTO_REPOSITORY=https://github.com/hw-native-sys/pypto.git
-ARG PYPTO_COMMIT=894d6f8890213cc7a2a48375488c43ca83671a66
+ARG PYPTO_COMMIT=ba849ed61ddae99a0be56fec0774e94562d8d6d3
 RUN git clone --filter=blob:none "${PYPTO_REPOSITORY}" "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \
@@ -189,8 +189,8 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
     git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
 
 # Install ptoas x86_64 used by simulator CI jobs (wheel from GitHub Release).
-ARG PTOAS_VERSION=v0.72
-ARG PTOAS_WHEEL_SHA256=2cc47b1d4c8ace884fb12f7691e0c368132fefef401060c920bed2a5210e3db7
+ARG PTOAS_VERSION=v0.74
+ARG PTOAS_WHEEL_SHA256=4e685e03122533c138e73852a144715a929c63a25eaf1447cbdb4395c46b77ec
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_x86_64.whl" && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
