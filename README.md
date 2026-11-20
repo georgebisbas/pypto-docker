@@ -721,6 +721,45 @@ configurations, so UB-capable silicon in a chassis without the interconnect
 looks exactly like this. `npu-smi info -t spod-info` answering "This device does
 not support querying spod-info" is the same message from the SuperPod side.
 
+#### Worked example: a PCIe-only A5 host (aisrv05, 2026-11-20)
+
+A full hardware report from a machine that cannot run URMA, as a reference for
+what to collect and what the answers look like. Every layer agrees.
+
+| Check | Result |
+| ----- | ------ |
+| `npu-smi info` | 4× Ascend950PR, driver 25.7.rc1 |
+| `npu-smi info -t board -i 0..3` | all identical: board `0x1c`, main board `0x6c(4P)`, PCB A, BOM 1, slots 6–9 |
+| `npu-smi info -t topo` | `PIX` between 0↔1 and 2↔3, `PHB` across — no `UB` |
+| `npu-smi info -t spod-info` | "This device does not support querying spod-info" |
+| `lspci -d 19e5:` | 4 accelerator functions, no UB functions |
+| `hccn_tool -g -ub_connect -i 0..3` | `link status: DOWN`, ports 4/5/6 `INITIAL` on every card |
+| `hccn_tool -g -serdes -i 0 -u 0 -p 4` | port exists: 4 lanes, FIR taps programmed, **SNR 0** |
+| `hccn_tool -g -optical` / `-speed` | `Cmd execute failed!` — no optical cages, so UB here would be copper |
+| `/dev/ub*`, `lsmod`, `/lib/modules` | no ubcore/uburma nodes or modules (Ubuntu 22.04, 5.15.0-198-generic) |
+| HCCL log | `HcclMainboardId::MAINBOARD_PCIE_STD`; `HcclRankGraphGetLinks` succeeds, `linkNum[2]` |
+| pto-isa plog | `rank=0 no UBC_TP/CTP link to peer=1` — same on the 0,1 and 2,3 pairs |
+
+Reading it: the chips **do** carry UB ports and the SerDes is configured, but no
+port has a link partner, so HCCL's rank graph reports no UBC_TP/CTP link and
+URMA domain allocation aborts with `code -4`. The product-name field differs
+between cards (`NA` vs `A310-50-C00MM304A2`) but every other identifier matches,
+so that is an unprogrammed EEPROM field, not a hardware difference.
+
+Note the two distinct "UB" stacks, which are easy to conflate:
+
+- **ubcore / uburma + UMDK** — the host-side UB fabric stack, carried by the
+  openEuler kernel. Missing here, but *not* what these tests use.
+- **Chip-to-chip UB links** (`UBC_TP`/`UB_CTP`) — driven through HCCL and the
+  Ascend driver. This is the path the URMA provider takes, and the one that is
+  down on this host.
+
+For contrast, the same suites pass on the `npu-a5` CI runner (`238PR-npu-a5-2`,
+also x86_64) — `TestUrmaMultiJettyDepth`, `SmallRequests`, `Senders` and
+`QueueWrap` on devices `[2, 3]`. `TestUrmaMultiJettyBoundaries` fails there too,
+with an unrelated `child teardown: pid … exited with code 1`, so do not use that
+case as a first smoke test; prefer `TestUrmaMultiJettyDepth`.
+
 A matrix showing only `PIX` / `PHB` (PCIe paths) with no `UB`, no `/dev/ub*`
 nodes and no UB modules means the cards are PCIe-attached with no UB fabric,
 and the URMA suites **cannot** pass there — no CANN version, build flag or
