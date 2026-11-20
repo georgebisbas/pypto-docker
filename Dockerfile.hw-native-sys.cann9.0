@@ -265,6 +265,28 @@ ENV PTO_ISA_ROOT=${PTO_ISA_DIR}
 # Install PTOAS (cp310 manylinux wheel — mirrors pypto CI's toolchain job since
 # PR #2291). The wheel is CPython 3.10-only (cp310 ABI tag), so it is
 # installed into a dedicated python3.10 venv; the base image is Python 3.12.
+#
+# PYTHONPATH must be scrubbed for every call into this venv. CANN 9.2.0-950
+# ships its own ptoas (0.65) in ascend-toolkit/latest/python/site-packages, and
+# the base image puts that directory on PYTHONPATH — ahead of the venv's own
+# site-packages, so `import ptoas` resolves to CANN's copy, not the pinned
+# wheel. CANN's copy then tries to build its native core on import and dies on
+# the missing /usr/include/python3.10/Python.h. CANN 9.0.0-910b ships no ptoas,
+# which is why this only bites the 950 (A5) base image.
+#
+# The scrub lives inside bin/ptoas, so PTOAS_ROOT consumers — pypto's codegen
+# included — get the pinned assembler by default and no caller has to manage
+# PYTHONPATH itself. It must stay at run time as well: the base image's
+# ENTRYPOINT re-prepends CANN's directories on every `docker run`, so ENV order
+# alone cannot win (the same problem the purelib symlink solves for
+# `import pypto` further down).
+#
+# Deleting CANN's bundled ptoas — the way pip removes CANN's conflicting pypto
+# distribution below — is NOT an option here: CANN's own ptodsl and TileOps/a5
+# import it (verified in cann-9.2.0/python/site-packages). It also cannot be
+# replaced by the pinned wheel, which is cp310-only while the image's python is
+# 3.12; that ABI gap is why PTOAS lives in a venv at all. So CANN's copy stays
+# for CANN's consumers, and ours wins for ours.
 ARG PTOAS_VERSION=v0.74
 ARG PTOAS_SHA256_X86_64=4e685e03122533c138e73852a144715a929c63a25eaf1447cbdb4395c46b77ec
 ARG PTOAS_SHA256_AARCH64=ad537294ea4f034d335a0fadf3a2b1dcc81c99fe5a73bed5d40a74545bedba56
@@ -279,7 +301,11 @@ RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m)
       -o "/tmp/${PTOAS_WHEEL}" && \
     echo "${PTOAS_SHA256}  /tmp/${PTOAS_WHEEL}" | sha256sum -c - && \
     python3.10 -m venv "${PTOAS_DIR}" && \
-    "${PTOAS_DIR}/bin/python" -m pip install "/tmp/${PTOAS_WHEEL}" && \
+    env -u PYTHONPATH "${PTOAS_DIR}/bin/python" -m pip install "/tmp/${PTOAS_WHEEL}" && \
+    mv "${PTOAS_DIR}/bin/ptoas" "${PTOAS_DIR}/bin/ptoas-venv" && \
+    printf '#!/bin/bash\nexec env -u PYTHONPATH %s/bin/ptoas-venv "$@"\n' "${PTOAS_DIR}" \
+      > "${PTOAS_DIR}/bin/ptoas" && \
+    chmod +x "${PTOAS_DIR}/bin/ptoas" && \
     "${PTOAS_DIR}/bin/ptoas" --version && \
     rm -f "/tmp/${PTOAS_WHEEL}"
 
