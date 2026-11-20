@@ -33,6 +33,13 @@
 # BUILD (CANN 9.2, as used for the 9.2 images):
 #   docker build --build-arg CANN_VERSION=9.2.0-beta.1 -t pypto3-hw-native-sys:cann9.2 - < Dockerfile.hw-native-sys.cann9.0
 #
+# BUILD (A5 / URMA — CANN 9.2 on 950 silicon):
+#   docker build --build-arg CANN_VERSION=9.2.0 --build-arg CANN_SOC=950 \
+#     --build-arg BUILD_TARGETS=build_package_a5 -t pypto3-hw-native-sys:a5 - < Dockerfile.hw-native-sys.cann9.0
+#   Only the 950 base image ships the A5 AICore codegen (dav-c310) and the HCCL
+#   channel-config API (HcclChannelAcquireWithConfig) the URMA provider needs.
+#   Run A5 tests with --platform a5; this image does NOT build a2a3.
+#
 # BUILD (custom prefix / pinned pto-isa / different commit):
 #   docker build --build-arg PYPTO_COMMIT=d4877b8a67be95006828d78f58ef0ae55220c732 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
@@ -122,11 +129,16 @@
 #   pytest examples/workers/l3/ tests/st/worker/comm_domain/deferred_notify tests/st/worker/comm_domain/async_notify examples/a2a3/tensormap_and_ringbuffer/sdma_async_completion_demo -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
 
 # ARG before FROM: drives the base image tag.
+# CANN_SOC selects the silicon flavour of the base image: 910b (a2a3) or 950 (A5).
+# Only the 950 image carries the A5 AICore codegen (dav-c310) and the HCCL
+# channel-config API the URMA provider needs — see BUILD_TARGETS below.
 ARG CANN_VERSION=9.0.0
-FROM quay.io/ascend/cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12
+ARG CANN_SOC=910b
+FROM quay.io/ascend/cann:${CANN_VERSION}-${CANN_SOC}-ubuntu22.04-py3.12
 
 # Re-declare after FROM (ARG scope resets after each FROM).
 ARG CANN_VERSION=9.0.0
+ARG CANN_SOC=910b
 ARG INSTALL_PREFIX=/opt
 
 # Persist as ENV so all subsequent instructions can reference them.
@@ -276,10 +288,13 @@ RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_$(uname -m)
 # runtime builds every platform the host detects, including A5, and an
 # A5 build requires HcclChannelAcquireWithConfig for the URMA provider — an
 # API absent from CANN 9.0.0 and 9.2.0-beta.1, so the wheel build fails.
+# Override via --build-arg BUILD_TARGETS=build_package_a5 together with
+# CANN_SOC=950 to get a URMA-capable A5 image.
+ARG BUILD_TARGETS="build_package_a2a3;build_package_sim"
 RUN --mount=type=cache,target=/root/.cache/pip \
     rm -rf ./runtime/build && \
     pip install --no-build-isolation \
-      --config-settings "build.targets=build_package_a2a3;build_package_sim" ./runtime
+      --config-settings "build.targets=${BUILD_TARGETS}" ./runtime
 
 # Build and install pypto.
 RUN --mount=type=cache,target=/root/.cache/pip \
