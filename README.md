@@ -698,10 +698,28 @@ that is the HCCL-collectives path, not URMA.
 five-second check that can save a 20GB pull and a 15-minute build:
 
 ```bash
-npu-smi info -t topo        # look for UB in the matrix
-ls -d /dev/ub* 2>/dev/null  # ubcore / uburma char devices
-lsmod | grep -iE 'ubcore|uburma'
+# the authoritative check — the driver's own UB port state
+for i in 0 1 2 3; do echo "NPU $i"; \
+  /usr/local/Ascend/driver/tools/hccn_tool -g -ub_connect -i $i; done
+npu-smi info -t spod-info -i 0   # SuperPod membership
+npu-smi info -t topo             # look for UB in the matrix
 ```
+
+`hccn_tool -g -ub_connect` is the clearest signal. Healthy UB reports the ports
+`UP`; a host with no UB interconnect reports:
+
+```
+link status : DOWN
+port 4 : INITIAL
+port 5 : INITIAL
+port 6 : INITIAL
+```
+
+`INITIAL` means the port was never trained — nothing is connected to it. The
+Ascend 950PR (Atlas 350) card has UB ports and supports 2- and 4-card UB
+configurations, so UB-capable silicon in a chassis without the interconnect
+looks exactly like this. `npu-smi info -t spod-info` answering "This device does
+not support querying spod-info" is the same message from the SuperPod side.
 
 A matrix showing only `PIX` / `PHB` (PCIe paths) with no `UB`, no `/dev/ub*`
 nodes and no UB modules means the cards are PCIe-attached with no UB fabric,
