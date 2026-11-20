@@ -63,6 +63,10 @@ first (the `scripts/build-*.sh` wrappers already do this).
 
 ## Build Commands
 
+The `scripts/build-npu-images.sh` wrapper builds the usual set; pass `--a5` for
+the Ascend 950 / URMA variants (see [Runtime Notes (Ascend 950 / A5,
+URMA)](#runtime-notes-ascend-950--a5-urma)).
+
 Build standalone hw-native-sys image (defaults):
 
 ```bash
@@ -416,27 +420,55 @@ docker run --rm -it \
 
 The same runtime rule applies to `simpler-cann9` and `pytorch-hccl-tests:cann9`: include `--pid=host` for distributed/HCCL workflows.
 
-Before HCCL tests in **pypto** or **simpler** images, set `LD_PRELOAD` (it is **not** baked into the image):
+Before HCCL tests in **pypto** or **simpler** images, set `LD_PRELOAD` (it is **not** baked into the image).
+`${CANN_HOME}/arch-linux` is a symlink the image creates to CANN's arch-specific
+lib directory (`x86_64-linux` or `aarch64-linux`, per `uname -m`), so the same
+command works on either host:
 
 ```bash
-export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so   # direct / no-queue runs only
+export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so   # direct / no-queue runs only
 ```
 
 > **On a shared queue host, do not export this in your shell before `task-submit`** —
 > preloading `libhccl.so` into the task client kills the task instantly (`completed (exit=137)`,
 > no log file). Scope it to the submitted command instead:
-> `task-submit … --run 'LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so pytest …'`.
+> `task-submit … --run 'LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so pytest …'`.
 > See [TASK_QUEUE.md](TASK_QUEUE.md) pitfall P1.
 
 The **pytorch-hccl-tests** image uses torch HCCL directly and does not need `LD_PRELOAD`; it still requires `--pid=host` for multi-rank NPU collectives.
 
-### CANN 9.2 build note
+### Base image selection: 910B vs 950 (A5)
 
-The existing CANN Dockerfiles accept `--build-arg CANN_VERSION=9.2.0-beta.1`.
-The validated 9.2-beta image explicitly builds the `a2a3` and simulator targets;
-this avoids the A5 URMA target because that CANN image does not provide
-`HcclChannelAcquireWithConfig`. Use a CANN release that provides that API before
-enabling the A5 onboard target.
+`CANN_VERSION` and `CANN_SOC` pick the base image; `BUILD_TARGETS` picks which
+platforms the runtime compiles. Defaults are 910B/a2a3, unchanged.
+
+| Target | base image | build targets |
+| ------ | ---------- | ------------- |
+| a2a3 (default) | `cann:${CANN_VERSION}-910b-ubuntu22.04-py3.12` | `build_package_a2a3;build_package_sim` |
+| A5 / URMA | `cann:9.3.0-beta.1-950-ubuntu22.04-py3.12` | `build_package_a5` |
+
+An A5 image needs **CANN 9.3.0-beta.1 or newer on the 950 line**. Earlier
+releases fail, each for its own reason, and both failures are compile-time:
+
+- **9.0.0 / 9.2.0-beta.1 (910b)** — no `HcclChannelAcquireWithConfig`, which the
+  URMA provider needs, and no A5 AICore codegen (`dav-c310`). This is why the
+  default build list names `a2a3` and `sim` explicitly rather than letting the
+  runtime autodetect.
+- **9.2.0 (950)** — has the HCCL channel API, the `dav-c310` codegen and the
+  `Ascend950*.ini` platform configs, but its `include/hcomm/ccu/ccu_res_defs.h`
+  stops at `HCOMM_CCU_RES_TYPE_INSTRUCTION = 6`. simpler's A5 CCU registration
+  reads `HCOMM_CCU_RES_TYPE_CASC_CNT` (`ccu_domain_registration_hcomm.cpp:94`,
+  from simpler PR #2986), so the build dies with *"'HCOMM_CCU_RES_TYPE_CASC_CNT'
+  was not declared in this scope"*. That enumerator first appears on the 9.3.0
+  line — hcomm commit `2b5d32c30`, carried by no release tag up to and including
+  `v9.2.0`. `ccu_domain_registration_hcomm.h:25` also hardcodes
+  `kResourceTypeCount = 8`, so removing the single reference would not help.
+
+Nothing in simpler checks this at configure time: `a5_urma_toolchain_available()`
+probes only the HCCL channel API, and `toolchain.py` checks that the CCU headers
+*exist*, never their contents. A 9.2.0 SDK therefore passes every check and then
+fails at compile. The A5 CI jobs pin no CANN at all — they source whatever
+`/usr/local/Ascend/cann/set_env.sh` the self-hosted runner provides.
 
 Mount only the host driver path at runtime:
 
@@ -567,3 +599,58 @@ WORLD_SIZE=8 make mbw-mr DEVICE=npu        # world_size//2 concurrent sender/rec
 WORLD_SIZE = 2`, pass it as `make mbw-mr WORLD_SIZE=8 …` instead.)
 
 Update this to plain `master` once PR #9 merges.
+
+## Runtime Notes (Ascend 950 / A5, URMA)
+
+Build the A5 images (see the base-image table above for why 9.3 is the default):
+
+```bash
+./scripts/build-npu-images.sh --a5            # pypto + simpler
+./scripts/build-npu-images.sh --a5 pypto      # just pypto3-hw-native-sys:a5
+```
+
+`--a5` implies `CANN_VERSION=9.3.0-beta.1`, `CANN_SOC=950` and
+`BUILD_TARGETS=build_package_a5`, tagging `pypto3-hw-native-sys:a5` /
+`simpler-a5`. These images build **only** a5 — not a2a3. `pto-kernels` has no A5
+variant and is skipped. Any env var still overrides the defaults. The equivalent
+direct build:
+
+```bash
+docker build --build-arg CANN_VERSION=9.3.0-beta.1 --build-arg CANN_SOC=950 \
+  --build-arg BUILD_TARGETS=build_package_a5 \
+  -t pypto3-hw-native-sys:a5 - < Dockerfile.hw-native-sys.cann9.0
+```
+
+Run (multi-device, as URMA needs):
+
+```bash
+docker run --rm -it \
+  --privileged --ipc=host --pid=host \
+  --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
+  -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro \
+  -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+  -v /dev:/dev \
+  pypto3-hw-native-sys:a5
+```
+
+Inside the container — gate on silicon **before** taking a card, since a
+mislabeled host produces confusing device errors (507018 / 507899):
+
+```bash
+cd /opt/pypto/runtime
+.claude/skills/onboard-arch-precheck/check.sh a5      # exit 2 = not A5 silicon
+mkdir -p outputs/urma/ascend
+export ASCEND_PROCESS_LOG_PATH="$PWD/outputs/urma/ascend"
+python -m pytest tests/st/a5/tensormap_and_ringbuffer/urma_multi_jetty \
+  --platform a5 --device 0,1 --require-pto-isa --pto-session-timeout 1200 -v -s
+```
+
+Device counts: `urma_multi_jetty` needs 2, `urma_concurrent_senders` and
+`urma_deferred_completion` need 3. URMA is compiled in by default and RDMA is
+OFF by default, so no extra env is required. `LD_PRELOAD` is **not** needed —
+that is the HCCL-collectives path, not URMA.
+
+Host prerequisites worth checking before a long pull: `npu-smi info` should
+report `Ascend950*`, and all cards should read `Health: OK`. The container
+brings its own CANN, so the host's CANN version does not matter; the host
+*driver* does, and is mounted read-only from `/usr/local/Ascend/driver`.

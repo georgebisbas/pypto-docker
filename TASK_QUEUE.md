@@ -43,7 +43,7 @@ task-submit --device auto --max-time 1800 --timeout 0 \
 
 # D. Distributed (HCCL) test through the queue — 2 cards
 task-submit --device auto --device-num 2 --max-time 3600 --timeout 0 \
-  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/aarch64-linux/lib64/libhccl.so \
+  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/arch-linux/lib64/libhccl.so \
          pytest tests/st/distributed/collectives/test_l3_allreduce.py::TestL3AllReduce::test_allreduce[2] \
          -v --device=$TASK_DEVICE'
 ```
@@ -189,7 +189,7 @@ Requirements, in addition to §3's flags:
 1. `--pid=host` **at `docker run`** (already in the recipe).
 2. Preload `libhccl.so` **inside the `--run` string** (see pitfall P1 for why not in the shell):
 
-   `LD_PRELOAD=$CANN_HOME/aarch64-linux/lib64/libhccl.so` (path is baked in the image;
+   `LD_PRELOAD=$CANN_HOME/arch-linux/lib64/libhccl.so` (path is baked in the image;
    `${CANN_HOME}` expands at job-run time too).
 3. Grant exactly as many cards as the test needs: `--device num N` → `$TASK_DEVICE="0,1,…"`.
 
@@ -197,7 +197,7 @@ Verified — 2-card L3 allreduce:
 
 ```bash
 task-submit --device auto --device-num 2 --max-time 3600 --timeout 0 \
-  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/aarch64-linux/lib64/libhccl.so \
+  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/arch-linux/lib64/libhccl.so \
          pytest tests/st/distributed/collectives/test_l3_allreduce.py::TestL3AllReduce::test_allreduce[2] \
          -v --device=$TASK_DEVICE'
 ```
@@ -208,7 +208,7 @@ Verified — 4-card case of the same file (separate grant, because the case need
 
 ```bash
 task-submit --device auto --device-num 4 --max-time 3600 --timeout 0 \
-  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/aarch64-linux/lib64/libhccl.so \
+  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/arch-linux/lib64/libhccl.so \
          pytest tests/st/distributed/collectives/test_l3_allreduce.py::TestL3AllReduce::test_allreduce[4] \
          -v --device=$TASK_DEVICE'
 ```
@@ -219,12 +219,12 @@ Full suite — split to stay under the 3600 s cap (CI parity):
 
 ```bash
 task-submit --device auto --device-num 4 --max-time 3600 --timeout 0 \
-  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/aarch64-linux/lib64/libhccl.so \
+  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/arch-linux/lib64/libhccl.so \
          pytest tests/st/distributed -v --device=$TASK_DEVICE \
          --ignore=tests/st/distributed/collectives --ignore=tests/st/distributed/test_l2_multi_orch.py'
 
 task-submit --device auto --device-num 4 --max-time 3600 --timeout 0 \
-  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/aarch64-linux/lib64/libhccl.so \
+  --run 'cd /opt/pypto && LD_PRELOAD=$CANN_HOME/arch-linux/lib64/libhccl.so \
          pytest tests/st/distributed/collectives -v --device=$TASK_DEVICE'
 ```
 

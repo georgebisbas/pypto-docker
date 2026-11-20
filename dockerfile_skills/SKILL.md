@@ -182,7 +182,7 @@ Note: Pass-through image — no new build steps beyond `git clone pypto-lib`. Al
 | 4 | `LD_PRELOAD` comment-only (no `ENV`)? | `grep LD_PRELOAD Dockerfile.pypto-lib.cann9.0` — should be comments only | Remove image-wide `ENV LD_PRELOAD` |
 | 5 | `set_env.sh` not re-sourced? | Inherited from base image — already stripped there. If base image pattern changes, verify this image doesn't re-add it | Align with base image pattern |
 
-Note: Pass-through image — no new build steps beyond `git clone pypto-lib`. All toolchain and HCCL env comes from the base image. HCCL collectives need `export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so` before running multi-card examples.
+Note: Pass-through image — no new build steps beyond `git clone pypto-lib`. All toolchain and HCCL env comes from the base image. HCCL collectives need `export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so` before running multi-card examples.
 
 ### `Dockerfile.pytorch-hccl-tests.cann9.0` — HCCL benchmarks only
 
@@ -431,7 +431,7 @@ in the shell before `task-submit` — see "Shared queue hosts" above.
 - **pytorch-hccl-tests image:** `LD_PRELOAD` is not needed (torch HCCL path; no `host_runtime.so`).
 
 ```bash
-export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so
 ```
 
 → See `../../pypto-tooling/debugging_skills/SKILL.md` → "`LD_PRELOAD=libhccl.so`" and "VS Code attach hang" for details.
@@ -478,6 +478,9 @@ Error message contains...
 ├─ "PTOAS SHA256 mismatch"          → CI bumped version → update ARGs
 ├─ "No module named 'scikit_build_core'" on `pip install -e` → bare pip is the ptoas venv pip (cp310) → use `python3.12 -m pip`
 ├─ "custom op ... unknown"          → PTOAS too old → update PTOAS_VERSION
+├─ "HCOMM_CCU_RES_TYPE_CASC_CNT ... not declared" → A5 build on CANN < 9.3.0 → use 950 + 9.3.0-beta.1
+├─ "libhccl.so missing at .../aarch64-linux" → hardcoded arch dir → use ${CANN_HOME}/arch-linux
+├─ "Python.h not found" from ptoas on import → CANN's own ptoas shadows the pinned venv → scrub PYTHONPATH
 ├─ "cannot import name ..." from site-packages after checkout → non-editable copy shadows -e → issue_pytorch_hccl_tests
 ├─ "Unsupported data type at::kDouble" → fp64 reduce on HCCL → use float32 → issue_pytorch_hccl_tests
 ├─ WORLD_SIZE=N make ... ignored    → Makefile export shadows env → make arg / ?= → issue_pytorch_hccl_tests
@@ -499,6 +502,9 @@ Error message contains...
 | `ImportError: cannot import name 'X'` from `site-packages/...` after `git checkout` | Non-editable `pip install .` copy shadows `pip install -e .` | `pip uninstall -y <pkg> && pip install -e .`; verify `python -c "import <pkg> as p; print(p.__file__)"` is under the repo, not site-packages → `issue_pytorch_hccl_tests.md` |
 | `ModuleNotFoundError: No module named 'scikit_build_core'` on `pip install --no-build-isolation -e .` in the NPU image | Bare `pip`/`python3` resolve to the **PTOAS venv** (cp310, wheel only), not the system Python that holds pypto's build toolchain | Use `python3.12 -m pip install --no-build-isolation -e .`, or de-shadow the shell: `export PATH=$(echo "$PATH" \| tr ':' '\n' \| grep -v '^/opt/ptoas-bin' \| paste -sd: -)`. Current images append `${PTOAS_DIR}/bin` instead of prepending it |
 | `WORLD_SIZE=N make ...` runs wrong rank count | Makefile `export VAR = n` shadows env prefix | Pass as make arg (`make t VAR=n`) or `make -e`; fix Makefile to `VAR ?= n` → `issue_pytorch_hccl_tests.md` |
+| `'HCOMM_CCU_RES_TYPE_CASC_CNT' was not declared in this scope` building `build_package_a5` | CANN older than the 9.3.0 line. The enumerator arrives in hcomm `2b5d32c30`, in no release tag up to `v9.2.0`; `cann:9.2.0-950`'s `ccu_res_defs.h` stops at `HCOMM_CCU_RES_TYPE_INSTRUCTION = 6`, while simpler's `ccu_domain_registration_hcomm.cpp:94` reads `CASC_CNT` (PR #2986) | Build on `cann:9.3.0-beta.1-950-*` — i.e. `./scripts/build-npu-images.sh --a5`, whose defaults encode this. Nothing checks it at configure time, so the failure is always at compile |
+| `RuntimeError: Python development headers not found (expected /usr/include/python3.10/Python.h)` from `ptoas --version` | CANN 9.2+/9.3 ship their **own** ptoas (0.65 / 0.69) in `ascend-toolkit/latest/python/site-packages`, and the base image puts that dir on `PYTHONPATH`, which precedes the venv's own site-packages. The pinned 0.74 wheel is shadowed, and CANN's copy tries to build its native core on import | Scrub `PYTHONPATH` for the venv — `${PTOAS_DIR}/bin/ptoas` is a wrapper doing exactly that. Do **not** install `python3.10-dev`: that "fixes" the build by shipping the wrong, unpinned assembler. CANN's copy cannot simply be deleted — its own `ptodsl` and `TileOps/a5` import it |
+| `libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64` on an x86_64 host | Hardcoded arch directory. CANN lays its libs under `$(uname -m)-linux` | Use the `${CANN_HOME}/arch-linux` symlink the images create |
 | `HCCL reduce: Unsupported data type at::kDouble` (ERR02007) | fp64 `dist.reduce` unsupported on HCCL (works on gloo) | Reduce in `float32`; use only HCCL dtypes (int32/fp16/fp32/bf16) → `issue_pytorch_hccl_tests.md` |
 
 For device health issues (dead NPUs, 507033): run `diagnose_npu.py` inside the container, or see `../../pypto-tooling/debugging_skills/SKILL.md`.
