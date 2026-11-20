@@ -162,6 +162,8 @@ if [[ "${FAILED}" -ne 0 ]]; then
   exit 1
 fi
 echo "${C_GREEN}${C_BOLD}Done. NPU image(s) built.${C_RESET}"
+# Optional extra mounts (dcmi / hccn.conf / ascend_install.info / npu logs):
+# see "Optional extra mounts" in README.md — add each only if it exists on the host.
 RUN_FLAGS="--rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev"
 if [[ "${A5}" -eq 1 ]]; then
   echo "Run (A5; add --pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined for multi-device URMA/HCCL):"

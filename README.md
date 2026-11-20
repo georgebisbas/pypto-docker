@@ -470,6 +470,27 @@ probes only the HCCL channel API, and `toolchain.py` checks that the CCU headers
 fails at compile. The A5 CI jobs pin no CANN at all — they source whatever
 `/usr/local/Ascend/cann/set_env.sh` the self-hosted runner provides.
 
+### Optional extra mounts
+
+The run recipes above mount the minimum: `npu-smi`, the host driver and `/dev`.
+Some hosts also carry paths that driver tooling and HCCL RoCE setups expect.
+They are **not** needed for single-device runs or for URMA, but adding them
+removes "maybe it's a missing mount" from the next host you try:
+
+```bash
+-v /usr/local/dcmi:/usr/local/dcmi:ro
+-v /etc/hccn.conf:/etc/hccn.conf:ro
+-v /etc/ascend_install.info:/etc/ascend_install.info:ro
+-v /var/log/npu:/var/log/npu
+```
+
+Add each one only if it exists on the host: bind-mounting a missing file makes
+docker create an empty **directory** in its place, which breaks whatever reads
+it. Check first with `ls -ld /usr/local/dcmi /etc/hccn.conf /etc/ascend_install.info /var/log/npu`.
+
+A mount can only expose what the host already has. If a capability is missing
+on the host — UB fabric being the case we hit — no mount brings it back.
+
 Mount only the host driver path at runtime:
 
 ```text

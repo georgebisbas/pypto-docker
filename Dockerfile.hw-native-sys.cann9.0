@@ -46,6 +46,15 @@
 # BUILD (custom prefix / pinned pto-isa / different commit):
 #   docker build --build-arg PYPTO_COMMIT=d4877b8a67be95006828d78f58ef0ae55220c732 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
+#
+# OPTIONAL EXTRA MOUNTS (add only if the path exists on the host — docker
+# silently creates a *directory* for a missing file, which breaks the tool
+# that reads it). None are needed for single-device or URMA work; they matter
+# for some driver tooling and HCCL RoCE setups:
+#   -v /usr/local/dcmi:/usr/local/dcmi:ro
+#   -v /etc/hccn.conf:/etc/hccn.conf:ro
+#   -v /etc/ascend_install.info:/etc/ascend_install.info:ro
+#   -v /var/log/npu:/var/log/npu
 # RUN (single-device, NO HCCL):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev pypto3-hw-native-sys:cann9
 #

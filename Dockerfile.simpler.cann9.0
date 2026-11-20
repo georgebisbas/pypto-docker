@@ -41,6 +41,15 @@
 # BUILD (pinned simpler + pinned pto-isa):
 #   docker build --build-arg SIMPLER_COMMIT=9cf7491e506b5047796ef50c9cec5367c09dd4e4 --build-arg PTO_ISA_COMMIT=ffaa313e029055bac38eb0fd970ffb3384408d0b -t simpler-cann9 - < Dockerfile.simpler.cann9.0
 #
+#
+# OPTIONAL EXTRA MOUNTS (add only if the path exists on the host — docker
+# silently creates a *directory* for a missing file, which breaks the tool
+# that reads it). None are needed for single-device or URMA work; they matter
+# for some driver tooling and HCCL RoCE setups:
+#   -v /usr/local/dcmi:/usr/local/dcmi:ro
+#   -v /etc/hccn.conf:/etc/hccn.conf:ro
+#   -v /etc/ascend_install.info:/etc/ascend_install.info:ro
+#   -v /var/log/npu:/var/log/npu
 # RUN (single-device):
 #   docker run --rm -it --privileged --ipc=host -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro -v /dev:/dev simpler-cann9
 #
