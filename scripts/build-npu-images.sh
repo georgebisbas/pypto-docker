@@ -8,13 +8,16 @@
 #   ./scripts/build-npu-images.sh [--a5] [pypto|simpler|pto-kernels|all]
 #
 # --a5  Build A5 (Ascend 950) images with the URMA provider instead of the
-#       default a2a3/910B ones. Implies CANN_VERSION=9.2.0, CANN_SOC=950 and
-#       BUILD_TARGETS=build_package_a5, and tags the images pypto3-hw-native-sys:a5
-#       / simpler-a5. Only the 950 base image ships the A5 AICore codegen
-#       (dav-c310) and HcclChannelAcquireWithConfig, which the URMA provider
-#       needs. pto-kernels has no A5 variant and is skipped. Run its tests with
-#       --platform a5; these images do NOT build a2a3. Any env override below
-#       still wins over the --a5 defaults.
+#       default a2a3/910B ones. Implies CANN_VERSION=9.3.0-beta.1, CANN_SOC=950
+#       and BUILD_TARGETS=build_package_a5, and tags the images
+#       pypto3-hw-native-sys:a5 / simpler-a5. Only a 950 base image ships the A5
+#       AICore codegen (dav-c310) and HcclChannelAcquireWithConfig, which the
+#       URMA provider needs; 9.3.0-beta.1 rather than 9.2.0 because simpler's A5
+#       CCU registration needs hcomm's HCOMM_CCU_RES_TYPE_CASC_CNT, which first
+#       appears on the 9.3.0 line (hcomm 2b5d32c30, in no release tag up to and
+#       including v9.2.0). pto-kernels has no A5 variant and is skipped. Run the
+#       tests with --platform a5; these images do NOT build a2a3. Any env
+#       override below still wins over the --a5 defaults.
 #
 # Env overrides (only applied if non-empty; otherwise Dockerfile defaults apply):
 #   CANN_VERSION      selects base image tag and cann-* paths (defaults:
@@ -61,7 +64,7 @@ TARGET="${1:-all}"
 
 # A5 defaults — env overrides still win (:= only assigns when unset/empty).
 if [[ "${A5}" -eq 1 ]]; then
-  : "${CANN_VERSION:=9.2.0}"
+  : "${CANN_VERSION:=9.3.0-beta.1}"
   : "${CANN_SOC:=950}"
   : "${BUILD_TARGETS:=build_package_a5}"
   PYPTO_TAG="pypto3-hw-native-sys:a5"

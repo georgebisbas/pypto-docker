@@ -33,9 +33,12 @@
 # BUILD (CANN 9.2, as used for the 9.2 images):
 #   docker build --build-arg CANN_VERSION=9.2.0-beta.1 -t pypto3-hw-native-sys:cann9.2 - < Dockerfile.hw-native-sys.cann9.0
 #
-# BUILD (A5 / URMA — CANN 9.2 on 950 silicon):
-#   docker build --build-arg CANN_VERSION=9.2.0 --build-arg CANN_SOC=950 \
+# BUILD (A5 / URMA — CANN 9.3 on 950 silicon):
+#   docker build --build-arg CANN_VERSION=9.3.0-beta.1 --build-arg CANN_SOC=950 \
 #     --build-arg BUILD_TARGETS=build_package_a5 -t pypto3-hw-native-sys:a5 - < Dockerfile.hw-native-sys.cann9.0
+#   CANN 9.2.0 cannot build this target: hcomm's HCOMM_CCU_RES_TYPE_CASC_CNT,
+#   which simpler's A5 CCU registration needs, first appears on the 9.3.0 line
+#   (hcomm 2b5d32c30, in no release tag up to and including v9.2.0).
 #   Only the 950 base image ships the A5 AICore codegen (dav-c310) and the HCCL
 #   channel-config API (HcclChannelAcquireWithConfig) the URMA provider needs.
 #   Run A5 tests with --platform a5; this image does NOT build a2a3.
