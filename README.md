@@ -666,6 +666,29 @@ python -m pytest tests/st/a5/tensormap_and_ringbuffer/urma_multi_jetty \
   --platform a5 --device 0,1 --require-pto-isa --pto-session-timeout 1200 -v -s
 ```
 
+The pypto-level URMA suite lives in the pypto tree, not simpler's, and is what
+pypto CI's `onboard-tests-a5-distributed` job runs:
+
+```bash
+cd /opt/pypto
+python -m pytest tests/st/distributed/test_l3_urma_async.py \
+  --platform=a5 --device=0,1 --durations=0 -v
+```
+
+**Do not assume devices `0,1` are UB-connected.** On the `npu-a5` CI runner the
+allocator picks a connected pair (`task-submit --device auto --device-num 2`,
+per `pypto/.github/workflows/ci-a5-distributed.yml`), and that suite skips its
+P=4 cases because four-card URMA is not available there. UB connectivity is a
+property of specific card pairs, so on a queue host let the allocator choose;
+elsewhere, read the topology matrix and pick a pair that shows `UB`.
+
+For reference on what UB-capable A5 hardware looks like: DeepEP-Ascend lists
+"Ascend 950 (A5) with UBMEM connectivity and UBC_CTP/URMA channels between the
+participating ranks" as a hardware requirement, and its measurements come from
+Ascend 950DT in an Atlas 850E supernode using netlayer 1, the supernode's
+external Clos network. A PCIe chassis of Ascend950PR add-in cards is a
+different product and has no UB fabric.
+
 Device counts: `urma_multi_jetty` needs 2, `urma_concurrent_senders` and
 `urma_deferred_completion` need 3. URMA is compiled in by default and RDMA is
 OFF by default, so no extra env is required. `LD_PRELOAD` is **not** needed —
