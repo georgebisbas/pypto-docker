@@ -30,7 +30,7 @@
 #
 # BUILD (A5 / URMA — CANN 9.2 on 950 silicon):
 #   docker build --build-arg CANN_VERSION=9.2.0 --build-arg CANN_SOC=950 \
-#     --build-arg BUILD_TARGETS=build_package_a5 -t simpler-a5:cann9.2 - < Dockerfile.simpler.cann9.0
+#     --build-arg BUILD_TARGETS=build_package_a5 -t simpler-a5 - < Dockerfile.simpler.cann9.0
 #   Only the 950 base image ships the A5 AICore codegen (dav-c310) and the HCCL
 #   channel-config API (HcclChannelAcquireWithConfig) the URMA provider needs.
 #   Run A5 tests with --platform a5; this image does NOT build a2a3.
