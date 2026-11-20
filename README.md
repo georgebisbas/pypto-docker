@@ -650,6 +650,34 @@ Device counts: `urma_multi_jetty` needs 2, `urma_concurrent_senders` and
 OFF by default, so no extra env is required. `LD_PRELOAD` is **not** needed —
 that is the HCCL-collectives path, not URMA.
 
+**Check the interconnect first — URMA needs UB links between cards.** This is a
+five-second check that can save a 20GB pull and a 15-minute build:
+
+```bash
+npu-smi info -t topo        # look for UB in the matrix
+ls -d /dev/ub* 2>/dev/null  # ubcore / uburma char devices
+lsmod | grep -iE 'ubcore|uburma'
+```
+
+A matrix showing only `PIX` / `PHB` (PCIe paths) with no `UB`, no `/dev/ub*`
+nodes and no UB modules means the cards are PCIe-attached with no UB fabric,
+and the URMA suites **cannot** pass there — no CANN version, build flag or
+`docker run` mount changes it. The failure appears late and obscurely:
+`alloc_domain: initialization failed with code -4` in the test output, with the
+real reason only in `$ASCEND_PROCESS_LOG_PATH/debug/plog`:
+
+```
+[PTO_HOST URMA urma_workspace_manager.hpp] rank=0 no UBC_TP/CTP link to peer=1
+[PTO_HOST URMA urma_workspace_channels.hpp] peer=1 has no layer-0 direct link;
+  set PTO_URMA_PEER_ROUTE=uplink ... or use the SharedPool layout instead
+```
+
+`PTO_URMA_PEER_ROUTE=uplink` only helps where UB uplink ports to a UB switch
+exist; on a PCIe-only board it fails identically. `HcclMainboardId::
+MAINBOARD_PCIE_STD` in the HCCL log is the same signal. Note those URMA
+diagnostics use pto-isa's own logger: they go to the plog file unless you set
+`PTO_ISA_SLOG_PRINT_TO_STDOUT=1` (**not** the `ASCEND_*` log variables).
+
 Host prerequisites worth checking before a long pull: `npu-smi info` should
 report `Ascend950*`, and all cards should read `Health: OK`. The container
 brings its own CANN, so the host's CANN version does not matter; the host
