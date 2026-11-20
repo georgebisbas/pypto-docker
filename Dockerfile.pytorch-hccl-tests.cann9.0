@@ -159,11 +159,16 @@ ENV PATH=${PT_HCCL_VENV}/bin:${PATH}
 ENV ASCEND_HOME_PATH=${CANN_HOME} \
     ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp \
     MPI_HOME=/usr
-ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+# CANN lays its runtime libs under an arch-specific dir (x86_64-linux / aarch64-linux).
+# Pin a stable alias so ENV/docs below need no arch branching.
+RUN ln -sfn "${CANN_HOME}/$(uname -m)-linux" "${CANN_HOME}/arch-linux" \
+    && test -d "${CANN_HOME}/arch-linux/lib64"
 
-RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
-    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
-        && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/arch-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+
+RUN test -f "${CANN_HOME}/arch-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/arch-linux/lib64/libhccl.so" \
+        && ls -la "${CANN_HOME}/arch-linux/lib64/" | grep -i hccl \
         && exit 1)
 # LD_PRELOAD is NOT set — this image uses torch_npu HCCL, not host_runtime.so weak symbols.
 

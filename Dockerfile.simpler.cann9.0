@@ -58,7 +58,7 @@
 #   python -m pytest examples tests/st -m 'sdma and not sdma_fault' --platform a2a3 --device 0,1 -v --require-pto-isa --pto-session-timeout 600
 #   python -m pytest examples tests/st -m sdma_fault --platform a2a3 --device 0 -v --require-pto-isa --pto-session-timeout 600
 #   # HCCL cases need libhccl preloaded (not set image-wide — see below):
-#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so
 #   python examples/workers/l3/allreduce/main.py -p a2a3 -d 0-1
 #   python examples/workers/l3/ep_dispatch_combine/main.py -p a2a3 -d 0-1
 #   python examples/workers/l3/ffn_tp_parallel/main.py -p a2a3 -d 0-1
@@ -180,10 +180,15 @@ RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.b
 # Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
 RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
 
+# CANN lays its runtime libs under an arch-specific dir (x86_64-linux / aarch64-linux).
+# Pin a stable alias so ENV/docs below need no arch branching.
+RUN ln -sfn "${CANN_HOME}/$(uname -m)-linux" "${CANN_HOME}/arch-linux" \
+    && test -d "${CANN_HOME}/arch-linux/lib64"
+
 # HCCL preload helper — a function, not an exported var, so it is a no-op
 # until explicitly called (safe under VS Code's userEnvProbe). See the
 # LD_PRELOAD comment further below for why it isn't exported image-wide.
-RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
+RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/arch-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
 
 ENV ASCEND_HOME_PATH=${CANN_HOME} \
     PTO_TILE_LIB_CODE_PATH=${CANN_HOME} \
@@ -191,16 +196,16 @@ ENV ASCEND_HOME_PATH=${CANN_HOME} \
     MPI_HOME=/usr \
     SIMPLER_ROOT=${SIMPLER_DIR} \
     PTO_ISA_ROOT=${PTO_ISA_DIR}
-ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/arch-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
 
 # HCCL: host_runtime.so has WEAK HCCL symbols — without libhccl.so loaded,
 # comm_init can SIGSEGV. Do NOT set LD_PRELOAD image-wide (VS Code attach hang).
 # Before HCCL tests/examples, export in your shell:
-#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so
 # Run-side: container MUST use --pid=host (see RUN section above).
-RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
-    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
-        && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \
+RUN test -f "${CANN_HOME}/arch-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/arch-linux/lib64/libhccl.so" \
+        && ls -la "${CANN_HOME}/arch-linux/lib64/" | grep -i hccl \
         && exit 1)
 # VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
 # override per-container via ~/.devcontainer/devcontainer.json: {"userEnvProbe": "none"}

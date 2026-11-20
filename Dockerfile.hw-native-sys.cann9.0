@@ -99,7 +99,7 @@
 #   # --- dist-system-tests (job: dist-system-tests; HCCL, bare-metal in CI) ---
 #   # CI runs without a GHA container; in Docker use --pid=host (see RUN block).
 #   # Set LD_PRELOAD before running (not image-wide — would break VS Code attach):
-#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so
 #   python -m pytest tests/st/distributed -v -n 6 --device-group-size 2 --device="0,1,2,3" --ignore=tests/st/distributed/test_l2_multi_orch.py
 #   # Multi-card cases outside tests/st/distributed:
 #   python -m pytest tests/st -v -m multi_card --ignore=tests/st/distributed --device="0,1,2,3" --platform=a2a3
@@ -117,7 +117,7 @@
 #   pytest tests/st/a2a3/ -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
 #   # HCCL UT + L3 examples — container MUST use --pid=host.
 #   # LD_PRELOAD is NOT set image-wide (would break VS Code attach). Set it in your shell first:
-#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so
 #   pytest tests/ut/py/test_worker/test_dynamic_alloc_hw.py tests/ut/py/test_worker/test_platform_comm.py -m requires_hardware --platform a2a3 --device 0,1,2,3 -v
 #   pytest examples/workers/l3/ tests/st/worker/comm_domain/deferred_notify tests/st/worker/comm_domain/async_notify examples/a2a3/tensormap_and_ringbuffer/sdma_async_completion_demo -v --platform a2a3 --device 0,1,2,3 --pto-session-timeout 600 --clone-protocol https --require-pto-isa
 
@@ -298,10 +298,15 @@ RUN for f in /etc/profile /etc/bash.bashrc /root/.profile /root/.bashrc /root/.b
 # Unset PTO2_RING_* if the host leaked them in — CI does the same before HCCL pytest.
 RUN echo "unset PTO2_RING_HEAP PTO2_RING_TASK_WINDOW PTO2_RING_DEP_POOL 2>/dev/null || true" >> /etc/bash.bashrc
 
+# CANN lays its runtime libs under an arch-specific dir (x86_64-linux / aarch64-linux).
+# Pin a stable alias so ENV/docs below need no arch branching.
+RUN ln -sfn "${CANN_HOME}/$(uname -m)-linux" "${CANN_HOME}/arch-linux" \
+    && test -d "${CANN_HOME}/arch-linux/lib64"
+
 # HCCL preload helper — a function, not an exported var, so it is a no-op
 # until explicitly called (safe under VS Code's userEnvProbe). See the
 # LD_PRELOAD comment further below for why it isn't exported image-wide.
-RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/aarch64-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
+RUN echo 'hccl-preload() { export LD_PRELOAD="${CANN_HOME}/arch-linux/lib64/libhccl.so"; echo "LD_PRELOAD set for this shell: $LD_PRELOAD"; }' >> /etc/bash.bashrc
 
 ENV ASCEND_HOME_PATH=${CANN_HOME} \
     PTO_TILE_LIB_CODE_PATH=${CANN_HOME} \
@@ -310,7 +315,7 @@ ENV ASCEND_HOME_PATH=${CANN_HOME} \
     PTOAS_ROOT=${PTOAS_DIR} \
     SIMPLER_ROOT=${PYPTO_DIR}/runtime \
     PTO_ISA_ROOT=${PTO_ISA_DIR}
-ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/arch-linux/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64:${LD_LIBRARY_PATH:-}
 
 # Preload libhccl.so so host_runtime.so's WEAK HCCL symbols resolve at load time.
 # Without this, HcclGetRootInfo et al. → NULL → SIGSEGV on comm_init.
@@ -318,14 +323,14 @@ ENV LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/driver:${CANN_HOME}/aarch64-l
 #
 # run-side: the container MUST be started with --pid=host for HCCL.
 # See ../pypto-tooling/debugging_skills/SKILL.md → "Docker runtime: HCCL".
-RUN test -f "${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
-    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/aarch64-linux/lib64/libhccl.so" \
-        && ls -la "${CANN_HOME}/aarch64-linux/lib64/" | grep -i hccl \
+RUN test -f "${CANN_HOME}/arch-linux/lib64/libhccl.so" \
+    || (echo "ERROR: libhccl.so missing at ${CANN_HOME}/arch-linux/lib64/libhccl.so" \
+        && ls -la "${CANN_HOME}/arch-linux/lib64/" | grep -i hccl \
         && exit 1)
 # LD_PRELOAD is NOT set automatically — setting it image-wide (ENV or bashrc) injects
 # libhccl.so into every process including VS Code server → hang on attach.
 # Before running HCCL tests, set it in your shell:
-#   export LD_PRELOAD=${CANN_HOME}/aarch64-linux/lib64/libhccl.so
+#   export LD_PRELOAD=${CANN_HOME}/arch-linux/lib64/libhccl.so
 # Without it, weak HCCL symbols in host_runtime.so stay NULL → SIGSEGV on comm_init.
 
 # VS Code's userEnvProbe: if it ever captures LD_PRELOAD and injects it into the server,
