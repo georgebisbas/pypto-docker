@@ -189,8 +189,18 @@ RUN if [ -z "${PTO_ISA_COMMIT}" ]; then \
     git -C "${PTO_ISA_DIR}" rev-parse --short HEAD
 
 # Install ptoas x86_64 used by simulator CI jobs (wheel from GitHub Release).
-ARG PTOAS_VERSION=v0.74
-ARG PTOAS_WHEEL_SHA256=4e685e03122533c138e73852a144715a929c63a25eaf1447cbdb4395c46b77ec
+#
+# Keep PTOAS_VERSION and PTOAS_WHEEL_SHA256 in lockstep with pypto's single
+# source of truth, `pypto/toolchain/versions.env` (PTOAS_VERSION and
+# PTOAS_SHA256_X86_64 — this image is x86_64). PyPTO enforces a MINIMUM at
+# codegen time: an image older than `versions.env` fails every test that
+# reaches ptoas with
+#   "ptoas at '/usr/local/bin/ptoas' is version X, but PyPTO requires >= Y".
+# That is not a branch regression — it means this image is stale. Bump both
+# lines here and rebuild. (Seen 2026-11-23: the published :sim image carried
+# v0.72 against a main requiring v0.77, failing ~2.4k unit tests.)
+ARG PTOAS_VERSION=v0.77
+ARG PTOAS_WHEEL_SHA256=165dbd72e93b8b0d870f02d4533abb4634fae895ff05d2c183426cd0b162890a
 RUN PTOAS_WHEEL="ptoas-${PTOAS_VERSION#v}-cp310-cp310-manylinux_2_34_x86_64.whl" && \
     curl --fail --location --retry 3 --retry-all-errors \
       "https://github.com/hw-native-sys/PTOAS/releases/download/${PTOAS_VERSION}/${PTOAS_WHEEL}" \
