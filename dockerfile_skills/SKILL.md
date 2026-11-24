@@ -396,7 +396,7 @@ Additional for HCCL / multi-device:
 
 ### Shared queue hosts — `task-submit`
 
-On `192.168.150.11` / `.12` (the queue hosts — `.13` has none) every NPU command goes through
+On `192.168.150.11` / `.12` / `.13` (the queue hosts) every NPU command goes through
 the per-card lock queue, including commands run inside these containers. Container-side changes:
 bind-mount the queue volume (`-v /var/lib/taskqueue:/var/lib/taskqueue`), expose the tools with
 `scripts/attach-taskqueue.sh <container>` (symlinks `task-submit`, `npu-lock`, and

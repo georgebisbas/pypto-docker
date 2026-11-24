@@ -12,8 +12,8 @@ on a queue host — including tests run inside these containers — must go thro
 | Where | Queue? |
 |---|---|
 | `192.168.150.11` (`hng-atlas01`) | ✅ mandatory |
-| `192.168.150.12` | ✅ mandatory |
-| `192.168.150.13` | ❌ none — use the plain recipes in [README.md](README.md) |
+| `192.168.150.12` (`hng-atlas02`) | ✅ mandatory |
+| `192.168.150.13` | ✅ mandatory |
 | Any host, `:sim` images | ❌ none — simulation needs no card |
 
 ---
