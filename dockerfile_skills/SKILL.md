@@ -58,7 +58,7 @@ The CANN images default to `quay.io/ascend/cann:9.0.0-910b-ubuntu22.04-py3.12`.
 `Dockerfile.hw-native-sys.cann9.0` and `Dockerfile.simpler.cann9.0` also build
 against CANN **9.2.0-beta.1** via `--build-arg CANN_VERSION=9.2.0-beta.1`
 (tag the result `:cann9.2` to keep the 9.0.0 image). `Dockerfile.pto-kernels.cann9.0`
-**defaults** to 9.2.0-beta.1 because its kernel sources need headers the 9.0.0
+**defaults** to 9.2.1 because its kernel sources need headers the 9.0.0
 toolchain lacks.
 
 CANN 9.2 notes:
@@ -209,7 +209,7 @@ As of `029e745b` the Makefile declares `export WORLD_SIZE ?= 2`, so a plain env 
 | # | Check | Command | What to update if drifted |
 |---|-------|---------|--------------------------|
 | 1 | pto-kernels `main` ahead of `PTO_KERNELS_COMMIT`? | `git ls-remote https://github.com/huawei-csl/pto-kernels.git HEAD` (also checked by `scripts/dockerfile-sync-check.sh`) | `ARG PTO_KERNELS_COMMIT` + header comment default |
-| 2 | CANN base still what pto-kernels CI uses? | Read `.gitlab-ci.yml` in pto-kernels at the pinned commit (currently `9.2.0-beta.1-910b-ubuntu22.04-py3.12`; also checked by `scripts/dockerfile-sync-check.sh`) | `ARG CANN_VERSION` + header comment |
+| 2 | CANN base still what pto-kernels CI uses? | Read `.gitlab-ci.yml` in pto-kernels at the pinned commit (currently `9.2.1-910b-ubuntu22.04-py3.12`; also checked by `scripts/dockerfile-sync-check.sh`) | `ARG CANN_VERSION` + header comment |
 | 3 | Build workarounds still needed? | See header: PyTorch CPU index for `torch==2.10.0+cpu`; devlib **appended** (never prepended) to `LD_LIBRARY_PATH` | Remove only after verifying the build/import still succeeds |
 
 ### Quick bulk check (all Dockerfiles)
