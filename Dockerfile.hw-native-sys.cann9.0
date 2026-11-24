@@ -10,7 +10,7 @@
 #   PYPTO_COMMIT    (default: full SHA of github main) — must exist on github.com/hw-native-sys/pypto
 #                   Use 40-char SHA when pinning an older commit (GitHub fetch rejects short SHAs).
 #   PTO_ISA_COMMIT  (default: auto)     — pto-isa commit; auto-derived from runtime/pto_isa.pin if not set
-#   PTOAS_VERSION   (default: v0.74)    — PTOAS release (must match pypto CI)
+#   PTOAS_VERSION   (default: v0.77)    — PTOAS release (must match pypto CI)
 #
 # REQUIREMENTS:
 #   - Internet access during build (GitHub)
@@ -44,7 +44,7 @@
 #   Run A5 tests with --platform a5; this image does NOT build a2a3.
 #
 # BUILD (custom prefix / pinned pto-isa / different commit):
-#   docker build --build-arg PYPTO_COMMIT=d4877b8a67be95006828d78f58ef0ae55220c732 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
+#   docker build --build-arg PYPTO_COMMIT=155c35b0d23db10f3fe120cc5ae6d69429a2c590 -t pypto3-hw-native-sys:cann9 - < Dockerfile.hw-native-sys.cann9.0
 #
 #
 # OPTIONAL EXTRA MOUNTS (add only if the path exists on the host — docker
@@ -66,7 +66,7 @@
 # COMMANDS INSIDE CONTAINER — mirrors pypto .github/workflows/ci.yml job order.
 #   INSTALL_PREFIX=/opt, CANN_VERSION=9.0.0. CANN env is sourced from bash.bashrc.
 #   Device lists are inlined below (change 0,1,2,3 / 0 to match your host).
-#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently 83b1b2b52ded9ec5d91e02532a57cd95e497ba86)
+#   PTO-ISA: image auto-derives from runtime/pto_isa.pin (currently 45435c0624c1d0d056bf38aa60d4f56dc0ef3b6b)
 #   unless PTO_ISA_COMMIT was overridden at build.
 #
 #   cd /opt/pypto
@@ -223,7 +223,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # Clone pypto at the pinned commit (changing PYPTO_COMMIT busts the layer cache automatically).
 # Uses a blobless clone (--filter=blob:none) so any commit SHA can be checked out;
 # GitHub does not allow shallow-fetching arbitrary SHAs directly.
-ARG PYPTO_COMMIT=bf75a8927410d729317b96eeda1df1e70b5c6f06
+ARG PYPTO_COMMIT=155c35b0d23db10f3fe120cc5ae6d69429a2c590
 RUN git clone --filter=blob:none https://github.com/hw-native-sys/pypto.git "${PYPTO_DIR}" && \
     if ! git -C "${PYPTO_DIR}" cat-file -e "${PYPTO_COMMIT}^{commit}" 2>/dev/null; then \
       git -C "${PYPTO_DIR}" fetch origin "${PYPTO_COMMIT}"; \

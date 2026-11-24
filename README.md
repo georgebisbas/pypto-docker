@@ -49,7 +49,7 @@ pypto-lib / pytorch-hccl-tests stack on Ascend 910B (CANN images) and x86_64 sim
 - Repositories (`pypto`, `pto-isa`) are cloned during build.
 - Key behavior is controlled via build args (`CANN_VERSION`, `INSTALL_PREFIX`, `PYPTO_COMMIT`, `PTO_ISA_COMMIT`).
 
-> **On a shared queue host (`192.168.150.11` / `.12`)?** Read [TASK_QUEUE.md](TASK_QUEUE.md)
+> **On a shared queue host (`192.168.150.11` / `.12` / `.13`)?** Read [TASK_QUEUE.md](TASK_QUEUE.md)
 > first — every card-touching command, including tests inside these containers, must go
 > through `task-submit`.
 
@@ -88,8 +88,8 @@ Build standalone hw-native-sys image (custom commit/pinning):
 
 ```bash
 docker build \
-  --build-arg PYPTO_COMMIT=d4877b8a67be95006828d78f58ef0ae55220c732 \
-  --build-arg PTO_ISA_COMMIT=83b1b2b52ded9ec5d91e02532a57cd95e497ba86 \
+  --build-arg PYPTO_COMMIT=155c35b0d23db10f3fe120cc5ae6d69429a2c590 \
+  --build-arg PTO_ISA_COMMIT=45435c0624c1d0d056bf38aa60d4f56dc0ef3b6b \
   -t pypto3-hw-native-sys:cann9 \
   - < Dockerfile.hw-native-sys.cann9.0
 ```
@@ -134,14 +134,14 @@ docker build \
   - < Dockerfile.pytorch-hccl-tests.cann9.0
 ```
 
-> **CI-aligned CANN-image defaults (2026-11-19):** pypto `d4877b8a`, PTOAS `v0.74`,
-> pto-isa `83b1b2b5` (pypto runtime) / `ffaa313e` (simpler), simpler `9cf7491e`,
+> **CI-aligned CANN-image defaults (2026-11-24):** pypto `155c35b0`, PTOAS `v0.77`,
+> pto-isa `45435c06` (pypto runtime) / `ffaa313e` (simpler), simpler `9cf7491e`,
 > pto-kernels `755846c3`; CANN 9.0.0 by default, CANN 9.2.0-beta.1 for the `:cann9.2`
 > images. The pypto can/sim images derive pto-isa from the pinned runtime's
 > `pto_isa.pin`, mirroring the pypto `toolchain` job.
 >
 > The **simulation** images (`*.sim.ubuntu22.04`) use the same validated PyPTO and
-> simpler pins as the CANN images (`d4877b8a` / `9cf7491e`); their pto-isa pins
+> simpler pins as the CANN images (`155c35b0` / `9cf7491e`); their pto-isa pins
 > are auto-derived from those checkouts.
 
 Build standalone local simulation image (no NPU required):
@@ -153,7 +153,7 @@ docker build -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu2
 Build standalone local simulation image (pinned commits):
 
 ```bash
-docker build --build-arg PYPTO_COMMIT=d4877b8a67be95006828d78f58ef0ae55220c732 --build-arg PTO_ISA_COMMIT=83b1b2b52ded9ec5d91e02532a57cd95e497ba86 -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
+docker build --build-arg PYPTO_COMMIT=155c35b0d23db10f3fe120cc5ae6d69429a2c590 --build-arg PTO_ISA_COMMIT=45435c0624c1d0d056bf38aa60d4f56dc0ef3b6b -t pypto3-hw-native-sys:sim -f Dockerfile.hw-native-sys.sim.ubuntu22.04 .
 ```
 
 Build standalone simpler simulation image (no NPU, no pypto):
@@ -499,7 +499,7 @@ Mount only the host driver path at runtime:
 
 Do not mount /usr/local/Ascend from host, because it can shadow the image's baked CANN version.
 
-### Shared queue hosts (`192.168.150.11` / `.12`) — run everything through `task-submit`
+### Shared queue hosts (`192.168.150.11` / `.12` / `.13`) — run everything through `task-submit`
 
 These hosts share their NPU cards across users through a per-card lock queue: `task-submit`
 grants a card, locks it, and only then runs your command. **Every command that touches a card —
@@ -511,8 +511,8 @@ recipes above you add exactly three things:
 3. wrap NPU commands: `task-submit --device auto … --run '… $TASK_DEVICE'`.
 
 Copy-paste instructions, verified examples (small ST + 2-card/4-card distributed L3 allreduce)
-and the pitfalls that actually bite: **[TASK_QUEUE.md](TASK_QUEUE.md)**. (`192.168.150.13` has
-no queue — use the recipes above directly there; `:sim` images never need it.)
+and the pitfalls that actually bite: **[TASK_QUEUE.md](TASK_QUEUE.md)**. (`:sim` images never
+need the queue — simulation uses no card.)
 
 The `RUN` / `COMMANDS INSIDE CONTAINER` blocks in each Dockerfile header show the same commands
 in their **direct (unqueued) form** — on a queue host, keep the commands and add the
